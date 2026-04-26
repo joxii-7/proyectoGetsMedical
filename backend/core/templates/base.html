@@ -1,0 +1,127 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #f4f6f8;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 165px;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+        }
+
+        .sidebar a {
+            width: 120px;
+            height: 90px;
+            background-color: #e2e8f0;
+            margin: 10px 0;
+            border-radius: 16px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            transition: all 0.25s ease;
+        }
+
+        .sidebar a:hover {
+            background-color: #2cb681;
+            transform: scale(1.08);
+        }
+
+        .sidebar img {
+            width: 95%;
+            height: 95%;
+            object-fit: contain;
+        }
+
+        /* CONTENIDO */
+        .content {
+            margin-left: 165px;
+            padding: 25px;
+        }
+
+        .card {
+            border-radius: 16px;
+            border: none;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+
+            .content {
+                margin-left: 70px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+
+    <a href="/">
+        <img src="{% static 'icons/home.png' %}">
+    </a>
+
+    <a href="/equipos/">
+        <img src="{% static 'icons/ct.png' %}">
+    </a>
+
+    <a href="/subir-mantenimientos/">
+        <img src="{% static 'icons/tools.png' %}">
+    </a>
+
+    <a href="/alertas/">
+        <img src="{% static 'icons/alert.png' %}">
+    </a>
+
+    <a href="/dashboard/">
+        <img src="{% static 'icons/chart.png' %}">
+    </a>
+
+    <hr style="border-color: #334155; margin: 15px;">
+
+    <div style="color: #94a3b8; font-size: 12px; padding: 0 20px;">
+        <p><b>Empresa:</b> GETS MEDICAL S.A.</p>
+        <p>Mantenimiento de equipos biomédicos</p>
+    </div>
+
+</div>
+
+<!-- CONTENIDO -->
+<div class="content">
+    {% block content %}{% endblock %}
+</div>
+
+<!-- Bootstrap JS (IMPORTANTE para modales) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Scripts específicos -->
+{% block scripts %}{% endblock %}
+
+</body>
+</html>

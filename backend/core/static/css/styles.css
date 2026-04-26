@@ -1,0 +1,56 @@
+/* Fondo general */
+body {
+    background-color: #f4f6f8;
+    color: #465973;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Navbar */
+.navbar {
+    background-color: #0f172a;
+}
+
+/* Tarjetas */
+.card {
+    border-radius: 16px;
+    border: none;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.05);
+}
+
+/* Botones */
+.btn-primary {
+    background-color: #2563eb;
+    border: none;
+    border-radius: 12px;
+    padding: 8px 16px;
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+/* Inputs */
+.form-control {
+    border-radius: 12px;
+    border: 1px solid #d1d5db;
+}
+
+/* Tabla */
+.table {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.table thead {
+    background-color: #e5e7eb;
+}
+
+/* Links */
+a {
+    color: #2563eb;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}

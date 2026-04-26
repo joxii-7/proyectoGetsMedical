@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <h2 class="mb-4 fw-bold">Gestión de Mantenimientos</h2>
+
+    <!-- 🔵 FORMULARIO MANUAL -->
+    <div class="card p-4 mb-4">
+        <h5 class="mb-3">Registrar Manualmente</h5>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="form_manual" value="1">
+
+            <div class="row">
+
+                <!-- 🔍 AUTOCOMPLETE EQUIPO -->
+                <div class="col-md-4 mb-3">
+                    <label>Código Equipo</label>
+                    <input list="listaEquipos" id="codigoEquipo" name="codigo_equipo" class="form-control" required>
+
+                    <datalist id="listaEquipos">
+                        {% for e in equipos %}
+                        <option value="{{ e.codigo }}">
+                        {% endfor %}
+                    </datalist>
+
+                    <!-- INFO DINÁMICA -->
+                    <small id="infoEquipo" class="text-muted"></small>
+                </div>
+
+                <!-- 🔽 TIPO -->
+                <div class="col-md-4 mb-3">
+                    <label>Tipo</label>
+                    <select name="tipo" class="form-control" required>
+                        <option value="preventivo">Preventivo</option>
+                        <option value="correctivo">Correctivo</option>
+                        <option value="predictivo">Predictivo</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4 mb-3">
+                    <label>Fecha</label>
+                    <input type="date" name="fecha" class="form-control" required>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label>Descripción</label>
+                    <input type="text" name="descripcion" class="form-control">
+                </div>
+
+                <!-- 👨‍🔧 TÉCNICOS -->
+                <div class="col-md-3 mb-3">
+                    <label>Técnico</label>
+                    <select name="tecnico" class="form-control" required>
+                        <option value="">Seleccionar...</option>
+                        {% for t in tecnicos %}
+                        <option value="{{ t.id }}">{{ t.nombre }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <label>Estado</label>
+                    <select name="estado" class="form-control">
+                        <option value="pendiente">Pendiente</option>
+                        <option value="completado">Completado</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <label>Costo</label>
+                    <input type="number" step="0.01" name="costo" class="form-control">
+                </div>
+
+            </div>
+
+            <button type="submit" class="btn btn-success">
+                ➕ Registrar mantenimiento
+            </button>
+
+        </form>
+
+        {% if mensaje %}
+        <div class="alert alert-info mt-3">
+            {{ mensaje }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 🔴 EXCEL -->
+    <div class="card p-4">
+        <h5 class="mb-3">Subir desde Excel</h5>
+
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label>Archivo Excel</label>
+                <input type="file" name="archivo" class="form-control" required>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" name="accion" value="preview" class="btn btn-secondary">
+                    👁️ Previsualizar
+                </button>
+
+                <button type="submit" name="accion" value="guardar" class="btn btn-primary">
+                    ⬆️ Subir a base de datos
+                </button>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- 👁️ PREVIEW -->
+    {% if preview %}
+    <div class="card p-4 mt-4">
+        <h5>Previsualización</h5>
+
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    {% for col in columnas %}
+                    <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in preview %}
+                <tr>
+                    {% for val in fila %}
+                    <td>{{ val }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- 🔥 SCRIPT INFO EQUIPO -->
+<script>
+const equiposData = {
+    {% for e in equipos %}
+    "{{ e.codigo }}": {
+        nombre: "{{ e.nombre|escapejs }}",
+        tipo: "{{ e.tipo|escapejs }}",
+        ubicacion: "{{ e.ubicacion|escapejs }}"
+    },
+    {% endfor %}
+};
+
+document.getElementById("codigoEquipo").addEventListener("input", function() {
+    const codigo = this.value;
+    const info = equiposData[codigo];
+
+    const display = document.getElementById("infoEquipo");
+
+    if (info) {
+        display.innerHTML = `
+            <strong>${info.nombre}</strong><br>
+            Tipo: ${info.tipo} | Ubicación: ${info.ubicacion}
+        `;
+    } else {
+        display.innerHTML = "Equipo no encontrado";
+    }
+});
+</script>
+
+{% endblock %}

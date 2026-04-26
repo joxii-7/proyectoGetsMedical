@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ equipo.nombre }}{% endblock %}
+
+{% block content %}
+<a href="/equipos/" class="btn btn-secondary mb-4">← Volver a equipos</a>
+
+{% if messages %}
+{% for msg in messages %}
+<div class="alert alert-dismissible fade show" role="alert"
+     style="background:#d1fae5;border-left:4px solid #10b981;color:#065f46">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- INFO EQUIPO -->
+<div class="card p-4 mb-4">
+    <h2 class="fw-bold mb-3">{{ equipo.nombre }}</h2>
+    <div class="row g-3">
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">CÓDIGO</p><p class="fw-bold">{{ equipo.codigo }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">TIPO</p><p class="fw-bold">{{ equipo.tipo }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">MARCA</p><p class="fw-bold">{{ equipo.marca }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">MODELO</p><p class="fw-bold">{{ equipo.modelo }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">SERIE</p><p class="fw-bold">{{ equipo.serie }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">UBICACIÓN</p><p class="fw-bold">{{ equipo.ubicacion }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">ESTADO</p><p class="fw-bold">{{ equipo.estado }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">CRITICIDAD</p><p class="fw-bold">{{ equipo.criticidad }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">ADQUISICIÓN</p><p class="fw-bold">{{ equipo.fecha_adquisicion|default:"—" }}</p></div>
+    </div>
+</div>
+
+<!-- MANTENIMIENTOS -->
+<div class="card p-4">
+    <h4 class="mb-3">Historial de Mantenimientos</h4>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Tipo</th><th>Fecha</th><th>Técnico</th>
+                    <th>Estado</th><th>Costo</th><th>Docs</th><th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for m in mantenimientos %}
+                <tr>
+                    <td>{{ m.tipo }}</td>
+                    <td>{{ m.fecha }}</td>
+                    <td>{{ m.tecnico|default:"—" }}</td>
+                    <td>
+                        {% if m.estado|lower == 'completado' %}<span class="badge bg-success">Completado</span>
+                        {% elif m.estado|lower == 'pendiente' %}<span class="badge bg-warning text-dark">Pendiente</span>
+                        {% elif m.estado|lower == 'proximo' %}<span class="badge bg-info text-dark">Próximo</span>
+                        {% else %}<span class="badge bg-secondary">{{ m.estado }}</span>{% endif %}
+                    </td>
+                    <td>${{ m.costo }}</td>
+                    <td>
+                        {% with n=m.documentos.count %}
+                            {% if n %}<span class="badge bg-primary">{{ n }} 📎</span>
+                            {% else %}<span class="text-muted">—</span>{% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-info"
+                                data-bs-toggle="modal"
+                                data-bs-target="#modal{{ m.id }}">🔍 Ver</button>
+                        <a href="/mantenimiento/{{ m.id }}/editar/"
+                           class="btn btn-sm btn-outline-primary">✏️</a>
+                    </td>
+                </tr>
+
+                <!-- MODAL -->
+                <div class="modal fade" id="modal{{ m.id }}" tabindex="-1">
+                  <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h5 class="modal-title">{{ m.tipo }} — {{ m.fecha }}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body">
+
+                        <!-- Datos -->
+                        <table class="table table-bordered mb-4">
+                          <tr><th style="width:35%">Equipo</th><td>{{ equipo.nombre }}</td></tr>
+                          <tr><th>Tipo</th><td>{{ m.tipo }}</td></tr>
+                          <tr><th>Fecha</th><td>{{ m.fecha }}</td></tr>
+                          <tr><th>Técnico</th><td>{{ m.tecnico|default:"—" }}</td></tr>
+                          <tr><th>Estado</th><td>{{ m.estado }}</td></tr>
+                          <tr><th>Costo</th><td>${{ m.costo }}</td></tr>
+                          <tr><th>Descripción</th><td>{{ m.descripcion|default:"—" }}</td></tr>
+                        </table>
+
+                        <!-- Documentos existentes -->
+                        <h6 class="fw-bold mb-3">📎 Documentos adjuntos</h6>
+                        {% if m.documentos.all %}
+                        <div class="row g-2 mb-4">
+                          {% for doc in m.documentos.all %}
+                          <div class="col-12">
+                            <div class="d-flex align-items-center justify-content-between border rounded p-2">
+                              <div class="d-flex align-items-center gap-2">
+                                <span class="fs-4">{% if doc.es_pdf %}📄{% elif doc.es_imagen %}🖼️{% else %}📁{% endif %}</span>
+                                <div>
+                                  <div class="fw-bold small">{{ doc.nombre }}</div>
+                                  <div class="text-muted" style="font-size:.75rem">
+                                    {{ doc.get_tipo_display }} &middot; {{ doc.fecha_subida|date:"d/m/Y H:i" }}
+                                    {% if doc.subido_por %}&middot; {{ doc.subido_por }}{% endif %}
+                                  </div>
+                                </div>
+                              </div>
+                              <div class="d-flex gap-1">
+                                <a href="{{ doc.archivo.url }}" target="_blank"
+                                   class="btn btn-sm btn-outline-success" title="Descargar">⬇️</a>
+                                <form method="post" action="/documento/{{ doc.id }}/eliminar/"
+                                      onsubmit="return confirm('¿Eliminar este documento?')">
+                                  {% csrf_token %}
+                                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">🗑️</button>
+                                </form>
+                              </div>
+                            </div>
+                          </div>
+                          {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted small mb-4">Sin documentos adjuntos todavía.</p>
+                        {% endif %}
+
+                        <!-- Subir nuevo documento -->
+                        <div class="bg-light rounded p-3">
+                          <h6 class="mb-3">➕ Adjuntar documento</h6>
+                          <form method="post"
+                                action="/mantenimiento/{{ m.id }}/documento/subir/"
+                                enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="row g-2">
+                              <div class="col-md-6">
+                                <label class="form-label small fw-bold">Tipo</label>
+                                <select name="tipo" class="form-select form-select-sm">
+                                  <option value="certificado">Certificado de calibración</option>
+                                  <option value="orden">Orden de trabajo</option>
+                                  <option value="foto">Fotografía</option>
+                                  <option value="informe">Informe técnico</option>
+                                  <option value="otro" selected>Otro</option>
+                                </select>
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nombre descriptivo</label>
+                                <input type="text" name="nombre" class="form-control form-control-sm"
+                                       placeholder="Ej: Cert. calibración abril 2025">
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label small fw-bold">Subido por</label>
+                                <input type="text" name="subido_por" class="form-control form-control-sm"
+                                       placeholder="Tu nombre">
+                              </div>
+                              <div class="col-md-6">
+                                <label class="form-label small fw-bold">Archivo <span class="text-muted">(máx. 10 MB)</span></label>
+                                <input type="file" name="archivo" class="form-control form-control-sm"
+                                       accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" required>
+                              </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm mt-3">📤 Subir</button>
+                          </form>
+                        </div>
+
+                      </div>
+                      <div class="modal-footer">
+                        <a href="/mantenimiento/{{ m.id }}/editar/" class="btn btn-primary">✏️ Editar</a>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- /MODAL -->
+
+            {% empty %}
+            <tr><td colspan="7" class="text-center text-muted py-4">Sin mantenimientos registrados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

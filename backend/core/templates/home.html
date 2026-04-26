@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row">
+
+    <div class="col-md-4">
+        <div class="card p-3">
+            <h5>Equipos</h5>
+            <h2>{{ total }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3">
+            <h5>Mantenimientos</h5>
+            <h2>{{ mantenimientos }}</h2>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3">
+            <h5>Estado del sistema</h5>
+            <h2 style="color: green;">Operativo</h2>
+        </div>
+    </div>
+
+</div>
+
+<br>
+
+<div class="card p-4">
+    <h4>Sistema de Gestión Biomédica</h4>
+    <p>
+        Plataforma para control de mantenimiento, monitoreo de equipos y gestión técnica.
+    </p>
+
+    <ul>
+        <li>✔ Registro de equipos</li>
+        <li>✔ Historial de mantenimiento</li>
+        <li>✔ Alertas automáticas</li>
+        <li>✔ Dashboard de análisis</li>
+    </ul>
+</div>
+
+{% endblock %}

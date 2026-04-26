@@ -1,0 +1,321 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <h1 class="mb-4 fw-bold">Dashboard de Gestión</h1>
+
+    <!-- ALERTAS BANNER -->
+    {% if proximos > 0 %}
+    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+        <span>⚠️ Hay <strong>{{ proximos }}</strong> mantenimiento{{ proximos|pluralize }} pendiente{{ proximos|pluralize }}</span>
+        <button class="btn btn-sm btn-warning"
+                data-bs-toggle="modal" data-bs-target="#modalProximos">
+            Ver lista
+        </button>
+    </div>
+    {% endif %}
+
+    {% if vencidos > 0 %}
+    <div class="alert alert-danger d-flex justify-content-between align-items-center">
+        <span>🔴 Hay <strong>{{ vencidos }}</strong> mantenimiento{{ vencidos|pluralize }} vencido{{ vencidos|pluralize }} sin completar</span>
+        <button class="btn btn-sm btn-danger"
+                data-bs-toggle="modal" data-bs-target="#modalVencidos">
+            Ver lista
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card p-3 text-center">
+                <h6 class="text-muted">Equipos</h6>
+                <h2 class="text-primary">{{ total_equipos }}</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 text-center">
+                <h6 class="text-muted">Mantenimientos</h6>
+                <h2 class="text-success">{{ total_mantenimientos }}</h2>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 text-center">
+                <h6 class="text-muted">Pendientes</h6>
+                <h2 class="text-warning">{{ proximos }}</h2>
+                <small>
+                    <button class="btn btn-link btn-sm p-0"
+                            data-bs-toggle="modal" data-bs-target="#modalProximos">
+                        Ver detalle
+                    </button>
+                </small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 text-center">
+                <h6 class="text-muted">Estado Sistema</h6>
+                {% if proximos == 0 and vencidos == 0 %}
+                    <h2 class="text-success">🟢 OK</h2>
+                {% elif vencidos > 0 %}
+                    <h2 class="text-danger">🔴 Crítico</h2>
+                {% else %}
+                    <h2 class="text-warning">🟡 Atención</h2>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- GRÁFICO + TABLA -->
+    <div class="row">
+        {% if labels and data %}
+        <div class="col-md-6">
+            <div class="card p-4 mb-4">
+                <h5 class="mb-3">Distribución por Tipo de Equipo</h5>
+                <div style="height: 350px;">
+                    <canvas id="grafico"></canvas>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-6">
+            <div class="card p-4 mb-4">
+                <h5 class="mb-3">Tipos de Equipos</h5>
+                <table class="table table-hover">
+                    <thead>
+                        <tr><th>Tipo</th><th>Cantidad</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in tipos %}
+                        <tr>
+                            <td>{{ item.tipo }}</td>
+                            <td><span class="badge bg-info text-dark">{{ item.total }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-center text-muted">Sin datos</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Botón realizados -->
+            <div class="card p-3 text-center">
+                <p class="mb-1 text-muted">Mantenimientos completados</p>
+                <h3 class="text-success">{{ realizados }}</h3>
+                <button class="btn btn-outline-success btn-sm"
+                        data-bs-toggle="modal" data-bs-target="#modalRealizados">
+                    Ver realizados
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: PENDIENTES
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalProximos" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">⚠️ Mantenimientos Pendientes ({{ proximos }})</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipo</th>
+                            <th>Tipo</th>
+                            <th>Fecha</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in proximos_lista %}
+                        <tr>
+                            <td>
+                                <a href="/equipo/{{ m.equipo.id }}/">
+                                    {{ m.equipo.nombre }}
+                                </a>
+                            </td>
+                            <td>{{ m.tipo }}</td>
+                            <td>{{ m.fecha }}</td>
+                            <td>{{ m.tecnico|default:"—" }}</td>
+                            <td>
+                                <span class="badge bg-warning text-dark">
+                                    {{ m.estado }}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="/mantenimiento/{{ m.id }}/editar/"
+                                   class="btn btn-sm btn-primary">
+                                    ✏️ Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                Sin mantenimientos pendientes
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: VENCIDOS
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalVencidos" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">🔴 Mantenimientos Vencidos sin Completar ({{ vencidos }})</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipo</th>
+                            <th>Tipo</th>
+                            <th>Fecha</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in vencidos_lista %}
+                        <tr>
+                            <td>
+                                <a href="/equipo/{{ m.equipo.id }}/">
+                                    {{ m.equipo.nombre }}
+                                </a>
+                            </td>
+                            <td>{{ m.tipo }}</td>
+                            <td class="text-danger fw-bold">{{ m.fecha }}</td>
+                            <td>{{ m.tecnico|default:"—" }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ m.estado }}</span>
+                            </td>
+                            <td>
+                                <a href="/mantenimiento/{{ m.id }}/editar/"
+                                   class="btn btn-sm btn-danger">
+                                    ✏️ Resolver
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                Sin vencidos
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MODAL: REALIZADOS
+═══════════════════════════════════════════ -->
+<div class="modal fade" id="modalRealizados" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">✅ Mantenimientos Realizados ({{ realizados }})</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipo</th>
+                            <th>Tipo</th>
+                            <th>Fecha</th>
+                            <th>Técnico</th>
+                            <th>Costo</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in realizados_lista %}
+                        <tr>
+                            <td>
+                                <a href="/equipo/{{ m.equipo.id }}/">
+                                    {{ m.equipo.nombre }}
+                                </a>
+                            </td>
+                            <td>{{ m.tipo }}</td>
+                            <td>{{ m.fecha }}</td>
+                            <td>{{ m.tecnico|default:"—" }}</td>
+                            <td>${{ m.costo }}</td>
+                            <td>
+                                <a href="/mantenimiento/{{ m.id }}/editar/"
+                                   class="btn btn-sm btn-outline-primary">
+                                    ✏️ Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted">
+                                Sin realizados
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const canvas = document.getElementById('grafico');
+    if (!canvas) return;
+
+    const chartLabels = {{ labels|safe }};
+    const chartData   = {{ data|safe }};
+
+    new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: chartLabels,
+            datasets: [{
+                data: chartData,
+                backgroundColor: [
+                    '#3b82f6','#10b981','#f59e0b',
+                    '#ef4444','#8b5cf6','#06b6d4'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+});
+</script>
+{% endblock %}
