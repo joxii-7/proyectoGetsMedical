@@ -1,6 +1,7 @@
 import pandas as pd
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
+from django.http import HttpResponse
 from .models import Equipo, Mantenimiento, Tecnico, Documento
 from datetime import date, timedelta
 from django.db.models import Count, Q
@@ -44,7 +45,7 @@ def detalle_equipo(request, id):
         .order_by('-fecha')
     )
     return render(request, 'detalle.html', {
-        'equipo': equipo,
+        'equipo':         equipo,
         'mantenimientos': mantenimientos,
     })
 
@@ -62,6 +63,16 @@ def editar_mantenimiento(request, id):
         mantenimiento.estado      = request.POST.get('estado', mantenimiento.estado)
         mantenimiento.costo       = float(request.POST.get('costo') or mantenimiento.costo)
 
+        # Etiqueta de este mantenimiento
+        mantenimiento.etiqueta      = request.POST.get('etiqueta') or None
+        mantenimiento.etiqueta_otro = request.POST.get('etiqueta_otro', '').strip() or None
+
+        # Próximo mantenimiento
+        fecha_prox = request.POST.get('fecha_proximo', '').strip()
+        mantenimiento.fecha_proximo         = fecha_prox or None
+        mantenimiento.etiqueta_proximo      = request.POST.get('etiqueta_proximo') or None
+        mantenimiento.etiqueta_proximo_otro = request.POST.get('etiqueta_proximo_otro', '').strip() or None
+
         tecnico_id = request.POST.get('tecnico')
         if tecnico_id:
             mantenimiento.tecnico = get_object_or_404(Tecnico, id=tecnico_id)
@@ -71,13 +82,14 @@ def editar_mantenimiento(request, id):
         return redirect(f'/equipo/{mantenimiento.equipo.id}/')
 
     return render(request, 'editar_mantenimiento.html', {
-        'm': mantenimiento,
+        'm':       mantenimiento,
         'tecnicos': Tecnico.objects.all(),
+        'etiqueta_choices': Mantenimiento.ETIQUETA_CHOICES,
     })
 
 
 # ──────────────────────────────────────────
-#  DOCUMENTOS ADJUNTOS
+#  DOCUMENTOS
 # ──────────────────────────────────────────
 def subir_documento(request, mantenimiento_id):
     mantenimiento = get_object_or_404(Mantenimiento, id=mantenimiento_id)
@@ -109,12 +121,9 @@ def subir_documento(request, mantenimiento_id):
 
     Documento.objects.create(
         mantenimiento=mantenimiento,
-        tipo=tipo,
-        nombre=nombre,
-        archivo=archivo,
-        subido_por=subido_por,
+        tipo=tipo, nombre=nombre,
+        archivo=archivo, subido_por=subido_por,
     )
-
     messages.success(request, f'✔ Documento "{nombre}" subido correctamente.')
     return redirect(f'/equipo/{mantenimiento.equipo.id}/')
 
@@ -193,23 +202,51 @@ def dashboard(request):
 
 
 # ──────────────────────────────────────────
-#  ALERTAS
+#  ALERTAS  ← BUG CORREGIDO
 # ──────────────────────────────────────────
 def alertas(request):
     limite = date.today() - timedelta(days=180)
     equipos_alerta = []
+
     for equipo in Equipo.objects.all():
-        ultimo = (
+        # ✅ FIX: solo cuenta mantenimientos COMPLETADOS para calcular cuándo
+        # fue el último real. Un mantenimiento pendiente no reinicia el reloj.
+        ultimo_completado = (
             Mantenimiento.objects
-            .filter(equipo=equipo)
+            .filter(equipo=equipo, estado__iexact='completado')
             .order_by('-fecha')
             .first()
         )
-        if not ultimo or ultimo.fecha < limite:
+
+        # El equipo entra en alerta si nunca tuvo un completado,
+        # o si el último completado supera los 180 días.
+        if not ultimo_completado or ultimo_completado.fecha < limite:
+
+            # Buscar si hay un próximo mantenimiento programado
+            proximo_programado = (
+                Mantenimiento.objects
+                .filter(equipo=equipo, fecha_proximo__isnull=False)
+                .order_by('-fecha')
+                .first()
+            )
+
             equipos_alerta.append({
-                'equipo': equipo,
-                'ultimo': ultimo.fecha if ultimo else 'Nunca',
+                'equipo':            equipo,
+                'ultimo':            ultimo_completado.fecha if ultimo_completado else 'Nunca',
+                'dias_sin_mant':     (date.today() - ultimo_completado.fecha).days
+                                     if ultimo_completado else None,
+                'proximo_fecha':     proximo_programado.fecha_proximo
+                                     if proximo_programado else None,
+                'proximo_etiqueta':  proximo_programado.etiqueta_proximo_display()
+                                     if proximo_programado else None,
             })
+
+    # Ordenar: primero los que no tienen próximo programado, luego por último mantenimiento
+    equipos_alerta.sort(key=lambda x: (
+        x['proximo_fecha'] is not None,   # sin fecha programada primero
+        x['ultimo'] if x['ultimo'] != 'Nunca' else date.min
+    ))
+
     return render(request, 'alertas.html', {'equipos': equipos_alerta})
 
 
@@ -242,9 +279,12 @@ def subir_equipos(request):
 #  SUBIR MANTENIMIENTOS
 # ──────────────────────────────────────────
 def subir_mantenimientos(request):
+    from .models import Mantenimiento
+    
     context = {
         'tecnicos': Tecnico.objects.all(),
         'equipos':  Equipo.objects.all(),
+        'TIPO_CHOICES': Mantenimiento.TIPO_CHOICES,
     }
 
     if request.method == 'POST' and request.POST.get('form_manual'):
@@ -255,6 +295,42 @@ def subir_mantenimientos(request):
         tecnico_id  = request.POST.get('tecnico')
         estado      = request.POST.get('estado')
         costo       = request.POST.get('costo')
+
+        # Guardar valores del formulario para mantenerlos en caso de error
+        context['form_data'] = {
+            'codigo_equipo': codigo,
+            'tipo': tipo,
+            'fecha': fecha,
+            'descripcion': descripcion,
+            'tecnico': tecnico_id,
+            'estado': estado,
+            'costo': costo,
+        }
+
+        # Validar que tipo no esté vacío
+        if not tipo:
+            context['mensaje'] = '❌ Debes seleccionar un tipo de mantenimiento'
+            return render(request, 'subir_mantenimientos.html', context)
+
+        # Validar fecha según estado
+        from datetime import datetime, timedelta
+        fecha_dt = datetime.strptime(fecha, '%Y-%m-%d').date()
+        hoy = datetime.now().date()
+        
+        if estado == 'pendiente':
+            # Pendiente → fecha debe ser hoy o futura
+            if fecha_dt < hoy:
+                context['mensaje'] = '❌ Un mantenimiento pendiente no puede tener fecha pasada'
+                return render(request, 'subir_mantenimientos.html', context)
+        elif estado == 'completado':
+            # Completado → fecha debe ser anterior a hoy (máx 10 años atrás)
+            fecha_min = hoy - timedelta(days=365*10)
+            if fecha_dt >= hoy:
+                context['mensaje'] = '❌ Un mantenimiento completado debe tener fecha anterior a hoy'
+                return render(request, 'subir_mantenimientos.html', context)
+            if fecha_dt < fecha_min:
+                context['mensaje'] = '❌ La fecha no puede ser más de 10 años en el pasado'
+                return render(request, 'subir_mantenimientos.html', context)
 
         equipo  = Equipo.objects.filter(codigo=codigo).first()
         tecnico = Tecnico.objects.filter(id=tecnico_id).first()
@@ -274,6 +350,9 @@ def subir_mantenimientos(request):
                 estado=estado, costo=float(costo or 0),
             )
             context['mensaje'] = '✔ Mantenimiento registrado correctamente'
+            # Limpiar formulario después de éxito
+            if 'form_data' in context:
+                del context['form_data']
         except Exception as e:
             context['mensaje'] = f'❌ Error: {e}'
 

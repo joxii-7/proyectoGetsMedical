@@ -145,7 +145,7 @@
                                     {{ m.equipo.nombre }}
                                 </a>
                             </td>
-                            <td>{{ m.tipo }}</td>
+                            <td>{{ m.get_tipo_display }}</td>
                             <td>{{ m.fecha }}</td>
                             <td>{{ m.tecnico|default:"—" }}</td>
                             <td>
@@ -204,7 +204,7 @@
                                     {{ m.equipo.nombre }}
                                 </a>
                             </td>
-                            <td>{{ m.tipo }}</td>
+                            <td>{{ m.get_tipo_display }}</td>
                             <td class="text-danger fw-bold">{{ m.fecha }}</td>
                             <td>{{ m.tecnico|default:"—" }}</td>
                             <td>
@@ -261,7 +261,7 @@
                                     {{ m.equipo.nombre }}
                                 </a>
                             </td>
-                            <td>{{ m.tipo }}</td>
+                            <td>{{ m.get_tipo_display }}</td>
                             <td>{{ m.fecha }}</td>
                             <td>{{ m.tecnico|default:"—" }}</td>
                             <td>${{ m.costo }}</td>

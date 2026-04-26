@@ -18,7 +18,7 @@
                 <!-- 🔍 AUTOCOMPLETE EQUIPO -->
                 <div class="col-md-4 mb-3">
                     <label>Código Equipo</label>
-                    <input list="listaEquipos" id="codigoEquipo" name="codigo_equipo" class="form-control" required>
+                    <input list="listaEquipos" id="codigoEquipo" name="codigo_equipo" class="form-control" required value="{{ form_data.codigo_equipo|default:'' }}">
 
                     <datalist id="listaEquipos">
                         {% for e in equipos %}
@@ -34,20 +34,21 @@
                 <div class="col-md-4 mb-3">
                     <label>Tipo</label>
                     <select name="tipo" class="form-control" required>
-                        <option value="preventivo">Preventivo</option>
-                        <option value="correctivo">Correctivo</option>
-                        <option value="predictivo">Predictivo</option>
+                        <option value="">Seleccionar...</option>
+                        {% for t in TIPO_CHOICES %}
+                        <option value="{{ t.0 }}" {% if form_data.tipo == t.0 %}selected{% endif %}>{{ t.1 }}</option>
+                        {% endfor %}
                     </select>
                 </div>
 
                 <div class="col-md-4 mb-3">
                     <label>Fecha</label>
-                    <input type="date" name="fecha" class="form-control" required>
+                    <input type="date" name="fecha" class="form-control" required value="{{ form_data.fecha|default:'' }}">
                 </div>
 
                 <div class="col-md-6 mb-3">
                     <label>Descripción</label>
-                    <input type="text" name="descripcion" class="form-control">
+                    <input type="text" name="descripcion" class="form-control" value="{{ form_data.descripcion|default:'' }}">
                 </div>
 
                 <!-- 👨‍🔧 TÉCNICOS -->
@@ -56,7 +57,7 @@
                     <select name="tecnico" class="form-control" required>
                         <option value="">Seleccionar...</option>
                         {% for t in tecnicos %}
-                        <option value="{{ t.id }}">{{ t.nombre }}</option>
+                        <option value="{{ t.id }}" {% if form_data.tecnico == t.id|stringformat:"s" %}selected{% endif %}>{{ t.nombre }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -64,14 +65,14 @@
                 <div class="col-md-3 mb-3">
                     <label>Estado</label>
                     <select name="estado" class="form-control">
-                        <option value="pendiente">Pendiente</option>
-                        <option value="completado">Completado</option>
+                        <option value="pendiente" {% if form_data.estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+                        <option value="completado" {% if form_data.estado == 'completado' %}selected{% endif %}>Completado</option>
                     </select>
                 </div>
 
                 <div class="col-md-3 mb-3">
                     <label>Costo</label>
-                    <input type="number" step="0.01" name="costo" class="form-control">
+                    <input type="number" step="0.01" name="costo" class="form-control" value="{{ form_data.costo|default:'' }}">
                 </div>
 
             </div>
@@ -172,3 +173,11 @@ document.getElementById("codigoEquipo").addEventListener("input", function() {
 </script>
 
 {% endblock %}
+
+TIPO_CHOICES = [
+    ('preventivo',  'Preventivo'),
+    ('correctivo',  'Correctivo'),
+    ('predictivo',  'Predictivo'),
+]
+
+tipo = models.CharField(max_length=50, choices=TIPO_CHOICES, default='preventivo')

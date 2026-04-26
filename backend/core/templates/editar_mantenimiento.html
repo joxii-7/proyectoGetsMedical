@@ -1,5 +1,4 @@
 {% extends 'base.html' %}
-
 {% block title %}Editar Mantenimiento{% endblock %}
 
 {% block content %}
@@ -7,7 +6,10 @@
 
 <div class="card p-4">
     <h3 class="fw-bold mb-1">Editar Mantenimiento</h3>
-    <p class="text-muted mb-4">Equipo: <strong>{{ m.equipo.nombre }}</strong> ({{ m.equipo.codigo }})</p>
+    <p class="text-muted mb-4">
+        Equipo: <strong>{{ m.equipo.nombre }}</strong>
+        <span class="badge bg-secondary">{{ m.equipo.codigo }}</span>
+    </p>
 
     {% if messages %}
     {% for msg in messages %}
@@ -18,67 +20,135 @@
     <form method="post">
         {% csrf_token %}
 
-        <div class="row">
+        <!-- ═══ DATOS DEL MANTENIMIENTO ACTUAL ═══ -->
+        <div class="card bg-light border-0 p-3 mb-4">
+            <h6 class="fw-bold text-muted text-uppercase mb-3" style="font-size:.8rem;letter-spacing:.05em">
+                Este mantenimiento
+            </h6>
+            <div class="row g-3">
 
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Tipo de Mantenimiento</label>
-                <select name="tipo" class="form-select" required>
-                    <option value="preventivo"  {% if m.tipo == 'preventivo'  %}selected{% endif %}>Preventivo</option>
-                    <option value="correctivo"  {% if m.tipo == 'correctivo'  %}selected{% endif %}>Correctivo</option>
-                    <option value="predictivo"  {% if m.tipo == 'predictivo'  %}selected{% endif %}>Predictivo</option>
-                </select>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Tipo</label>
+                    <select name="tipo" class="form-select" required>
+                        <option value="preventivo"  {% if m.tipo == 'preventivo'  %}selected{% endif %}>Preventivo</option>
+                        <option value="correctivo"  {% if m.tipo == 'correctivo'  %}selected{% endif %}>Correctivo</option>
+                        <option value="predictivo"  {% if m.tipo == 'predictivo'  %}selected{% endif %}>Predictivo</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Fecha</label>
+                    <input type="date" name="fecha" class="form-control"
+                           value="{{ m.fecha|date:'Y-m-d' }}" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Estado</label>
+                    <select name="estado" class="form-select" required>
+                        <option value="pendiente"  {% if m.estado == 'pendiente'  %}selected{% endif %}>Pendiente</option>
+                        <option value="completado" {% if m.estado == 'completado' %}selected{% endif %}>Completado</option>
+                        <option value="proximo"    {% if m.estado == 'proximo'    %}selected{% endif %}>Próximo</option>
+                        <option value="cancelado"  {% if m.estado == 'cancelado'  %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Técnico</label>
+                    <select name="tecnico" class="form-select">
+                        <option value="">Sin asignar</option>
+                        {% for t in tecnicos %}
+                        <option value="{{ t.id }}"
+                            {% if m.tecnico and m.tecnico.id == t.id %}selected{% endif %}>
+                            {{ t.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Costo ($)</label>
+                    <input type="number" step="0.01" name="costo"
+                           class="form-control" value="{{ m.costo }}">
+                </div>
+
+                <!-- Etiqueta de este mantenimiento -->
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Etiqueta de periodicidad</label>
+                    <select name="etiqueta" class="form-select" id="selectEtiqueta"
+                            onchange="toggleOtro('etiqueta', 'campoEtiquetaOtro')">
+                        <option value="">Sin etiqueta</option>
+                        {% for val, label in etiqueta_choices %}
+                        <option value="{{ val }}"
+                            {% if m.etiqueta == val %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Campo "otro" para etiqueta actual -->
+                <div class="col-md-4" id="campoEtiquetaOtro"
+                     style="{% if m.etiqueta != 'otro' %}display:none{% endif %}">
+                    <label class="form-label fw-bold">Especificar periodicidad</label>
+                    <input type="text" name="etiqueta_otro" class="form-control"
+                           value="{{ m.etiqueta_otro|default:'' }}"
+                           placeholder="Ej: Bimestral, cada 45 días...">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-bold">Descripción</label>
+                    <textarea name="descripcion" class="form-control"
+                              rows="3">{{ m.descripcion }}</textarea>
+                </div>
+
             </div>
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Fecha</label>
-                <input type="date" name="fecha" class="form-control"
-                       value="{{ m.fecha|date:'Y-m-d' }}" required>
-            </div>
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Técnico</label>
-                <select name="tecnico" class="form-select">
-                    <option value="">Sin asignar</option>
-                    {% for t in tecnicos %}
-                    <option value="{{ t.id }}"
-                        {% if m.tecnico and m.tecnico.id == t.id %}selected{% endif %}>
-                        {{ t.nombre }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Estado</label>
-                <select name="estado" class="form-select" required>
-                    <option value="pendiente"   {% if m.estado == 'pendiente'   %}selected{% endif %}>Pendiente</option>
-                    <option value="completado"  {% if m.estado == 'completado'  %}selected{% endif %}>Completado</option>
-                    <option value="proximo"     {% if m.estado == 'proximo'     %}selected{% endif %}>Próximo</option>
-                    <option value="cancelado"   {% if m.estado == 'cancelado'   %}selected{% endif %}>Cancelado</option>
-                </select>
-            </div>
-
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Costo ($)</label>
-                <input type="number" step="0.01" name="costo"
-                       class="form-control" value="{{ m.costo }}">
-            </div>
-
-            <div class="col-md-12 mb-3">
-                <label class="form-label fw-bold">Descripción</label>
-                <textarea name="descripcion" class="form-control"
-                          rows="3">{{ m.descripcion }}</textarea>
-            </div>
-
         </div>
 
-        <!-- Acceso rápido: marcar completado -->
-        <div class="d-flex gap-3 mt-2">
+        <!-- ═══ PRÓXIMO MANTENIMIENTO ═══ -->
+        <div class="card border-warning border-2 p-3 mb-4">
+            <h6 class="fw-bold text-warning text-uppercase mb-3" style="font-size:.8rem;letter-spacing:.05em">
+                📅 Próximo mantenimiento programado
+            </h6>
+            <div class="row g-3">
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Fecha del próximo</label>
+                    <input type="date" name="fecha_proximo" class="form-control"
+                           value="{{ m.fecha_proximo|date:'Y-m-d'|default:'' }}">
+                    <div class="form-text">Dejar vacío si aún no está definida.</div>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Etiqueta del próximo</label>
+                    <select name="etiqueta_proximo" class="form-select"
+                            onchange="toggleOtro('etiqueta_proximo', 'campoEtiquetaProxOtro')">
+                        <option value="">Sin etiqueta</option>
+                        {% for val, label in etiqueta_choices %}
+                        <option value="{{ val }}"
+                            {% if m.etiqueta_proximo == val %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Campo "otro" para etiqueta próximo -->
+                <div class="col-md-4" id="campoEtiquetaProxOtro"
+                     style="{% if m.etiqueta_proximo != 'otro' %}display:none{% endif %}">
+                    <label class="form-label fw-bold">Especificar periodicidad</label>
+                    <input type="text" name="etiqueta_proximo_otro" class="form-control"
+                           value="{{ m.etiqueta_proximo_otro|default:'' }}"
+                           placeholder="Ej: Bimestral, cada 45 días...">
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Botones -->
+        <div class="d-flex gap-3">
             <button type="submit" class="btn btn-primary px-4">
                 💾 Guardar cambios
             </button>
-
-            <!-- Atajo: fuerza estado=completado antes de submit -->
             <button type="button" class="btn btn-success px-4"
                     onclick="
                         document.querySelector('select[name=estado]').value='completado';
@@ -86,7 +156,6 @@
                     ">
                 ✅ Marcar como Completado
             </button>
-
             <a href="/equipo/{{ m.equipo.id }}/" class="btn btn-outline-secondary">
                 Cancelar
             </a>
@@ -94,4 +163,16 @@
 
     </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleOtro(selectName, campoId) {
+    const sel   = document.querySelector(`select[name="${selectName}"]`);
+    const campo = document.getElementById(campoId);
+    if (sel && campo) {
+        campo.style.display = sel.value === 'otro' ? 'block' : 'none';
+    }
+}
+</script>
 {% endblock %}

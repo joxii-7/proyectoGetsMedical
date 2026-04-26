@@ -1,5 +1,4 @@
 {% extends 'base.html' %}
-
 {% block title %}{{ equipo.nombre }}{% endblock %}
 
 {% block content %}
@@ -8,9 +7,8 @@
 {% if messages %}
 {% for msg in messages %}
 <div class="alert alert-dismissible fade show" role="alert"
-     style="background:#d1fae5;border-left:4px solid #10b981;color:#065f46">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+     style="border-left:4px solid #10b981;background:#d1fae5;color:#065f46">
+    {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endfor %}
 {% endif %}
@@ -33,26 +31,65 @@
 
 <!-- MANTENIMIENTOS -->
 <div class="card p-4">
-    <h4 class="mb-3">Historial de Mantenimientos</h4>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0">Historial de Mantenimientos</h4>
+
+        <!-- Filtro por fecha -->
+        <div class="d-flex gap-2 align-items-center flex-wrap">
+            <span class="text-muted small fw-bold">Filtrar:</span>
+            <input type="date" id="filtroDesde" class="form-control form-control-sm"
+                   style="width:150px">
+            <span class="text-muted small">→</span>
+            <input type="date" id="filtroHasta" class="form-control form-control-sm"
+                   style="width:150px">
+            <button class="btn btn-sm btn-outline-secondary" onclick="limpiarFiltro()">✕ Limpiar</button>
+        </div>
+    </div>
+
     <div class="table-responsive">
-        <table class="table table-hover align-middle">
+        <table class="table align-middle mb-0" id="tablaMantenimientos">
             <thead class="table-light">
                 <tr>
-                    <th>Tipo</th><th>Fecha</th><th>Técnico</th>
-                    <th>Estado</th><th>Costo</th><th>Docs</th><th>Acciones</th>
+                    <th style="width:36px"></th>
+                    <th>Tipo</th>
+                    <th>Fecha</th>
+                    <th>Técnico</th>
+                    <th>Estado</th>
+                    <th>Costo</th>
+                    <th>Docs</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
             {% for m in mantenimientos %}
-                <tr>
-                    <td>{{ m.tipo }}</td>
+
+                <!-- FILA RESUMEN -->
+                <tr class="fila-mant"
+                    data-fecha="{{ m.fecha|date:'Y-m-d' }}"
+                    onclick="toggleDetalle({{ m.id }}, this)"
+                    style="cursor:pointer">
+                    <td class="text-center">
+                        <span id="flecha{{ m.id }}"
+                              style="display:inline-block;transition:transform .2s;
+                                     font-size:.75rem;color:#6b7280">
+                            ▶
+                        </span>
+                    </td>
+                    <td class="fw-bold">{{ m.get_tipo_display }}</td>
                     <td>{{ m.fecha }}</td>
                     <td>{{ m.tecnico|default:"—" }}</td>
                     <td>
-                        {% if m.estado|lower == 'completado' %}<span class="badge bg-success">Completado</span>
-                        {% elif m.estado|lower == 'pendiente' %}<span class="badge bg-warning text-dark">Pendiente</span>
-                        {% elif m.estado|lower == 'proximo' %}<span class="badge bg-info text-dark">Próximo</span>
-                        {% else %}<span class="badge bg-secondary">{{ m.estado }}</span>{% endif %}
+                        {% if m.estado|lower == 'completado' %}
+                            <span class="badge bg-success">Completado</span>
+                        {% elif m.estado|lower == 'pendiente' %}
+                            <span class="badge bg-warning text-dark">Pendiente</span>
+                        {% elif m.estado|lower == 'proximo' %}
+                            <span class="badge bg-info text-dark">Próximo</span>
+                        {% elif m.estado|lower == 'cancelado' %}
+                            <span class="badge bg-danger">Cancelado</span>
+                        {% else %}
+                            <span class="badge bg-secondary">{{ m.estado }}</span>
+                        {% endif %}
                     </td>
                     <td>${{ m.costo }}</td>
                     <td>
@@ -61,123 +98,236 @@
                             {% else %}<span class="text-muted">—</span>{% endif %}
                         {% endwith %}
                     </td>
-                    <td class="d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-info"
-                                data-bs-toggle="modal"
-                                data-bs-target="#modal{{ m.id }}">🔍 Ver</button>
+                    <td onclick="event.stopPropagation()">
                         <a href="/mantenimiento/{{ m.id }}/editar/"
-                           class="btn btn-sm btn-outline-primary">✏️</a>
+                           class="btn btn-sm btn-outline-primary">✏️ Editar</a>
                     </td>
                 </tr>
 
-                <!-- MODAL -->
-                <div class="modal fade" id="modal{{ m.id }}" tabindex="-1">
-                  <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                      <div class="modal-header">
-                        <h5 class="modal-title">{{ m.tipo }} — {{ m.fecha }}</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                      </div>
-                      <div class="modal-body">
+                <!-- FILA DETALLE EXPANDIBLE -->
+                <tr id="detalle{{ m.id }}" class="fila-detalle" style="display:none">
+                    <td style="border-top:none;padding:0"></td>
+                    <td colspan="7" style="border-top:none;padding:0 0 12px 0">
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;
+                                    border-radius:10px;padding:20px;margin-right:4px">
 
-                        <!-- Datos -->
-                        <table class="table table-bordered mb-4">
-                          <tr><th style="width:35%">Equipo</th><td>{{ equipo.nombre }}</td></tr>
-                          <tr><th>Tipo</th><td>{{ m.tipo }}</td></tr>
-                          <tr><th>Fecha</th><td>{{ m.fecha }}</td></tr>
-                          <tr><th>Técnico</th><td>{{ m.tecnico|default:"—" }}</td></tr>
-                          <tr><th>Estado</th><td>{{ m.estado }}</td></tr>
-                          <tr><th>Costo</th><td>${{ m.costo }}</td></tr>
-                          <tr><th>Descripción</th><td>{{ m.descripcion|default:"—" }}</td></tr>
-                        </table>
+                            <div class="row g-3">
 
-                        <!-- Documentos existentes -->
-                        <h6 class="fw-bold mb-3">📎 Documentos adjuntos</h6>
-                        {% if m.documentos.all %}
-                        <div class="row g-2 mb-4">
-                          {% for doc in m.documentos.all %}
-                          <div class="col-12">
-                            <div class="d-flex align-items-center justify-content-between border rounded p-2">
-                              <div class="d-flex align-items-center gap-2">
-                                <span class="fs-4">{% if doc.es_pdf %}📄{% elif doc.es_imagen %}🖼️{% else %}📁{% endif %}</span>
-                                <div>
-                                  <div class="fw-bold small">{{ doc.nombre }}</div>
-                                  <div class="text-muted" style="font-size:.75rem">
-                                    {{ doc.get_tipo_display }} &middot; {{ doc.fecha_subida|date:"d/m/Y H:i" }}
-                                    {% if doc.subido_por %}&middot; {{ doc.subido_por }}{% endif %}
-                                  </div>
+                                <!-- Tabla info -->
+                                <div class="col-md-5">
+                                    <table class="table table-sm table-bordered mb-0 bg-white">
+                                        <tr>
+                                            <th style="width:38%;background:#f1f5f9;font-size:.82rem">Equipo</th>
+                                            <td style="font-size:.85rem">{{ equipo.nombre }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Tipo</th>
+                                            <td style="font-size:.85rem">{{ m.get_tipo_display }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Fecha</th>
+                                            <td style="font-size:.85rem">{{ m.fecha }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Periodicidad</th>
+                                            <td style="font-size:.85rem">{{ m.etiqueta_display }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Técnico</th>
+                                            <td style="font-size:.85rem">{{ m.tecnico|default:"—" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Estado</th>
+                                            <td style="font-size:.85rem">{{ m.estado }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Costo</th>
+                                            <td style="font-size:.85rem">${{ m.costo }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Descripción</th>
+                                            <td style="font-size:.85rem">{{ m.descripcion|default:"—" }}</td>
+                                        </tr>
+                                    </table>
                                 </div>
-                              </div>
-                              <div class="d-flex gap-1">
-                                <a href="{{ doc.archivo.url }}" target="_blank"
-                                   class="btn btn-sm btn-outline-success" title="Descargar">⬇️</a>
-                                <form method="post" action="/documento/{{ doc.id }}/eliminar/"
-                                      onsubmit="return confirm('¿Eliminar este documento?')">
-                                  {% csrf_token %}
-                                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar">🗑️</button>
-                                </form>
-                              </div>
-                            </div>
-                          </div>
-                          {% endfor %}
-                        </div>
-                        {% else %}
-                        <p class="text-muted small mb-4">Sin documentos adjuntos todavía.</p>
-                        {% endif %}
 
-                        <!-- Subir nuevo documento -->
-                        <div class="bg-light rounded p-3">
-                          <h6 class="mb-3">➕ Adjuntar documento</h6>
-                          <form method="post"
-                                action="/mantenimiento/{{ m.id }}/documento/subir/"
-                                enctype="multipart/form-data">
-                            {% csrf_token %}
-                            <div class="row g-2">
-                              <div class="col-md-6">
-                                <label class="form-label small fw-bold">Tipo</label>
-                                <select name="tipo" class="form-select form-select-sm">
-                                  <option value="certificado">Certificado de calibración</option>
-                                  <option value="orden">Orden de trabajo</option>
-                                  <option value="foto">Fotografía</option>
-                                  <option value="informe">Informe técnico</option>
-                                  <option value="otro" selected>Otro</option>
-                                </select>
-                              </div>
-                              <div class="col-md-6">
-                                <label class="form-label small fw-bold">Nombre descriptivo</label>
-                                <input type="text" name="nombre" class="form-control form-control-sm"
-                                       placeholder="Ej: Cert. calibración abril 2025">
-                              </div>
-                              <div class="col-md-6">
-                                <label class="form-label small fw-bold">Subido por</label>
-                                <input type="text" name="subido_por" class="form-control form-control-sm"
-                                       placeholder="Tu nombre">
-                              </div>
-                              <div class="col-md-6">
-                                <label class="form-label small fw-bold">Archivo <span class="text-muted">(máx. 10 MB)</span></label>
-                                <input type="file" name="archivo" class="form-control form-control-sm"
-                                       accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx" required>
-                              </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-sm mt-3">📤 Subir</button>
-                          </form>
-                        </div>
+                                <!-- Próximo + documentos -->
+                                <div class="col-md-7">
 
-                      </div>
-                      <div class="modal-footer">
-                        <a href="/mantenimiento/{{ m.id }}/editar/" class="btn btn-primary">✏️ Editar</a>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- /MODAL -->
+                                    <!-- Próximo mantenimiento -->
+                                    {% if m.fecha_proximo %}
+                                    <div class="alert alert-success py-2 mb-3 small">
+                                        📅 <strong>Próximo:</strong> {{ m.fecha_proximo }}
+                                        {% if m.etiqueta_proximo %}
+                                            — <span class="badge bg-secondary">{{ m.etiqueta_proximo_display }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <div class="alert alert-light border py-2 mb-3 small text-muted">
+                                        Sin próxima fecha programada.
+                                        <a href="/mantenimiento/{{ m.id }}/editar/" class="ms-1">Programar →</a>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Documentos -->
+                                    <p class="fw-bold small mb-2">📎 Documentos adjuntos</p>
+
+                                    {% if m.documentos.all %}
+                                    <div class="d-flex flex-column gap-1 mb-3">
+                                        {% for doc in m.documentos.all %}
+                                        <div class="d-flex align-items-center justify-content-between
+                                                    border rounded bg-white p-2">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span>{% if doc.es_pdf %}📄{% elif doc.es_imagen %}🖼️{% else %}📁{% endif %}</span>
+                                                <div>
+                                                    <div class="fw-bold" style="font-size:.82rem">{{ doc.nombre }}</div>
+                                                    <div class="text-muted" style="font-size:.72rem">
+                                                        {{ doc.get_tipo_display }} · {{ doc.fecha_subida|date:"d/m/Y H:i" }}
+                                                        {% if doc.subido_por %} · {{ doc.subido_por }}{% endif %}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex gap-1">
+                                                <a href="{{ doc.archivo.url }}" target="_blank"
+                                                   class="btn btn-sm btn-outline-success py-0">⬇️</a>
+                                                <form method="post"
+                                                      action="/documento/{{ doc.id }}/eliminar/"
+                                                      onsubmit="return confirm('¿Eliminar?')"
+                                                      onclick="event.stopPropagation()">
+                                                    {% csrf_token %}
+                                                    <button type="submit"
+                                                            class="btn btn-sm btn-outline-danger py-0">🗑️</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted small mb-3">Sin documentos todavía.</p>
+                                    {% endif %}
+
+                                    <!-- Subir documento -->
+                                    <div class="border rounded bg-white p-3"
+                                         onclick="event.stopPropagation()">
+                                        <p class="fw-bold small mb-2">➕ Adjuntar documento</p>
+                                        <form method="post"
+                                              action="/mantenimiento/{{ m.id }}/documento/subir/"
+                                              enctype="multipart/form-data">
+                                            {% csrf_token %}
+                                            <div class="row g-2">
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1">Tipo</label>
+                                                    <select name="tipo" class="form-select form-select-sm">
+                                                        <option value="certificado">Certificado de calibración</option>
+                                                        <option value="orden">Orden de trabajo</option>
+                                                        <option value="foto">Fotografía</option>
+                                                        <option value="informe">Informe técnico</option>
+                                                        <option value="otro" selected>Otro</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1">Nombre descriptivo</label>
+                                                    <input type="text" name="nombre"
+                                                           class="form-control form-control-sm"
+                                                           placeholder="Ej: Cert. calibración 2025">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1">Subido por</label>
+                                                    <input type="text" name="subido_por"
+                                                           class="form-control form-control-sm"
+                                                           placeholder="Tu nombre">
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="form-label small fw-bold mb-1">
+                                                        Archivo <span class="text-muted">(máx. 10 MB)</span>
+                                                    </label>
+                                                    <input type="file" name="archivo"
+                                                           class="form-control form-control-sm"
+                                                           accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
+                                                           required>
+                                                </div>
+                                            </div>
+                                            <button type="submit"
+                                                    class="btn btn-primary btn-sm mt-2">📤 Subir</button>
+                                        </form>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
 
             {% empty %}
-            <tr><td colspan="7" class="text-center text-muted py-4">Sin mantenimientos registrados.</td></tr>
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        Sin mantenimientos registrados.
+                    </td>
+                </tr>
             {% endfor %}
             </tbody>
         </table>
     </div>
+
+    <div id="sinResultados" class="text-center text-muted py-3" style="display:none">
+        No hay mantenimientos en ese rango de fechas.
+    </div>
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Expandir / colapsar ──────────────────────────────────
+function toggleDetalle(id, filaEl) {
+    const detalle = document.getElementById('detalle' + id);
+    const flecha  = document.getElementById('flecha' + id);
+    const abierto = detalle.style.display !== 'none';
+
+    // Cerrar todos los demás antes de abrir uno nuevo (opcional — quitar si se quieren varios a la vez)
+    document.querySelectorAll('.fila-detalle').forEach(el => {
+        if (el.id !== 'detalle' + id) el.style.display = 'none';
+    });
+    document.querySelectorAll('[id^="flecha"]').forEach(el => {
+        if (el.id !== 'flecha' + id) el.style.transform = 'rotate(0deg)';
+    });
+
+    detalle.style.display  = abierto ? 'none' : 'table-row';
+    flecha.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
+}
+
+// ── Filtro por rango de fechas ───────────────────────────
+document.getElementById('filtroDesde').addEventListener('change', aplicarFiltro);
+document.getElementById('filtroHasta').addEventListener('change', aplicarFiltro);
+
+function aplicarFiltro() {
+    const desde  = document.getElementById('filtroDesde').value;
+    const hasta  = document.getElementById('filtroHasta').value;
+    const filas  = document.querySelectorAll('.fila-mant');
+    let visibles = 0;
+
+    filas.forEach(fila => {
+        const fecha    = fila.dataset.fecha;
+        const id       = fila.querySelector('[id^="flecha"]').id.replace('flecha', '');
+        const detalle  = document.getElementById('detalle' + id);
+        const mostrar  = (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
+
+        fila.style.display = mostrar ? '' : 'none';
+        if (!mostrar && detalle) {
+            detalle.style.display = 'none';
+            document.getElementById('flecha' + id).style.transform = 'rotate(0deg)';
+        }
+        if (mostrar) visibles++;
+    });
+
+    document.getElementById('sinResultados').style.display =
+        visibles === 0 ? 'block' : 'none';
+}
+
+function limpiarFiltro() {
+    document.getElementById('filtroDesde').value = '';
+    document.getElementById('filtroHasta').value = '';
+    aplicarFiltro();
+}
+</script>
 {% endblock %}
