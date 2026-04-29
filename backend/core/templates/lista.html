@@ -9,15 +9,37 @@
 <h4 class="mb-3">Lista de Equipos</h4>
 
 <!-- 🔍 BUSCADOR PRO -->
-<form method="get" class="mb-4 d-flex gap-2">
-    <input 
-        type="text" 
-        name="q" 
-        placeholder="Buscar por nombre, código, tipo..." 
-        class="form-control"
-        value="{{ request.GET.q }}"
-    >
-    <button type="submit" class="btn btn-primary">Buscar</button>
+<form method="get" class="mb-4">
+    <div class="d-flex gap-2 flex-wrap">
+        <input
+            type="text"
+            name="q"
+            placeholder="Buscar por nombre, código, tipo..."
+            class="form-control"
+            style="min-width:220px;flex:1"
+            value="{{ request.GET.q }}"
+        >
+        <select name="cliente" class="form-select" style="min-width:200px;max-width:280px">
+            <option value="">— Todos los clientes —</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" {% if cliente_sel == c.id|stringformat:"s" %}selected{% endif %}>
+                {{ c.nombre }}
+            </option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Buscar</button>
+        {% if request.GET.q or request.GET.cliente %}
+        <a href="/equipos/" class="btn btn-outline-secondary">✕ Limpiar</a>
+        {% endif %}
+    </div>
+    {% if request.GET.cliente %}
+    <div class="mt-2">
+        <span class="badge bg-info text-dark fs-6">
+            📂 Filtrando por cliente:
+            {% for c in clientes %}{% if c.id|stringformat:"s" == request.GET.cliente %}{{ c.nombre }}{% endif %}{% endfor %}
+        </span>
+    </div>
+    {% endif %}
 </form>
 
 <!-- 📊 TABLA -->
@@ -30,6 +52,7 @@
     <th>Nombre</th>
     <th>Tipo</th>
     <th>Ubicación</th>
+    <th>Cliente</th>
 </tr>
 </thead>
 
@@ -42,8 +65,17 @@
         </a>
     </td>
     <td>{{ e.nombre }}</td>
-    <td>{{ e.tipo }}</td>
+    <td>{{ e.tipo_display }}</td>
     <td>{{ e.ubicacion }}</td>
+    <td>
+        {% if e.cliente %}
+        <a href="/equipos/?cliente={{ e.cliente.id }}" class="text-decoration-none text-muted small">
+            {{ e.cliente.nombre }}
+        </a>
+        {% else %}
+        <span class="text-muted">—</span>
+        {% endif %}
+    </td>
 </tr>
 {% endfor %}
 </tbody>

@@ -41,11 +41,31 @@
             align-items: center;
             overflow: hidden;
             transition: all 0.25s ease;
+            position: relative;
         }
 
         .sidebar a:hover {
             background-color: #2cb681;
             transform: scale(1.08);
+        }
+
+        /* Pestaña activa */
+        .sidebar a.active {
+            background-color: #2cb681;
+            box-shadow: 0 0 0 3px rgba(44, 182, 129, 0.4), 0 4px 16px rgba(44, 182, 129, 0.35);
+            transform: scale(1.06);
+        }
+
+        .sidebar a.active::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 48px;
+            background: #2cb681;
+            border-radius: 0 4px 4px 0;
         }
 
         .sidebar img {
@@ -83,23 +103,23 @@
 <!-- SIDEBAR -->
 <div class="sidebar">
 
-    <a href="/">
+    <a href="/" {% if request.path == '/' %}class="active"{% endif %}>
         <img src="{% static 'icons/home.png' %}">
     </a>
 
-    <a href="/equipos/">
+    <a href="/equipos/" {% if '/equipos' in request.path or '/equipo/' in request.path %}class="active"{% endif %}>
         <img src="{% static 'icons/ct.png' %}">
     </a>
 
-    <a href="/subir-mantenimientos/">
+    <a href="/subir-mantenimientos/" {% if 'subir-mantenimientos' in request.path or 'subir-equipos' in request.path %}class="active"{% endif %}>
         <img src="{% static 'icons/tools.png' %}">
     </a>
 
-    <a href="/alertas/">
+    <a href="/alertas/" {% if 'alertas' in request.path %}class="active"{% endif %}>
         <img src="{% static 'icons/alert.png' %}">
     </a>
 
-    <a href="/dashboard/">
+    <a href="/dashboard/" {% if 'dashboard' in request.path %}class="active"{% endif %}>
         <img src="{% static 'icons/chart.png' %}">
     </a>
 

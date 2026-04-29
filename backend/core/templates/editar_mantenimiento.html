@@ -29,11 +29,24 @@
 
                 <div class="col-md-4">
                     <label class="form-label fw-bold">Tipo</label>
-                    <select name="tipo" class="form-select" required>
-                        <option value="preventivo"  {% if m.tipo == 'preventivo'  %}selected{% endif %}>Preventivo</option>
-                        <option value="correctivo"  {% if m.tipo == 'correctivo'  %}selected{% endif %}>Correctivo</option>
-                        <option value="predictivo"  {% if m.tipo == 'predictivo'  %}selected{% endif %}>Predictivo</option>
+                    <select name="tipo" class="form-select" required
+                            onchange="toggleTipoOtro(this.value)">
+                        {% for val, label in tipo_choices %}
+                        <option value="{{ val }}"
+                            {% if m.tipo == val %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
                     </select>
+                </div>
+
+                <!-- Campo "otro" para tipo -->
+                <div class="col-md-4" id="campoTipoOtro"
+                     style="{% if m.tipo != 'otro' %}display:none{% endif %}">
+                    <label class="form-label fw-bold">Especificar tipo</label>
+                    <input type="text" name="tipo_otro" class="form-control"
+                           value="{{ m.tipo_otro|default:'' }}"
+                           placeholder="Ej: Calibración, Limpieza...">
                 </div>
 
                 <div class="col-md-4">
@@ -95,10 +108,37 @@
                            placeholder="Ej: Bimestral, cada 45 días...">
                 </div>
 
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Tipo de atención</label>
+                    <select name="tipo_atencion" class="form-select">
+                        {% for val, label in atencion_choices %}
+                        <option value="{{ val }}"
+                            {% if m.tipo_atencion == val %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <div class="col-12">
-                    <label class="form-label fw-bold">Descripción</label>
-                    <textarea name="descripcion" class="form-control"
-                              rows="3">{{ m.descripcion }}</textarea>
+                    <label class="form-label fw-bold">Problema / Asunto</label>
+                    <textarea name="problema" class="form-control"
+                              rows="2" placeholder="Describa el problema o asunto reportado...">{{ m.problema|default:'' }}</textarea>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-bold">Solución aplicada</label>
+                    <textarea name="solucion" class="form-control"
+                              rows="2" placeholder="Describa la solución o intervención realizada...">{{ m.solucion|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Usos / mAs del equipo</label>
+                    <input type="number" name="usos_mas" class="form-control"
+                           min="0"
+                           value="{{ m.equipo.usos_mas|default:'' }}"
+                           placeholder="Ej: 125000">
+                    <div class="form-text">Número de usos o mAs acumulados.</div>
                 </div>
 
             </div>
@@ -173,6 +213,11 @@ function toggleOtro(selectName, campoId) {
     if (sel && campo) {
         campo.style.display = sel.value === 'otro' ? 'block' : 'none';
     }
+}
+
+function toggleTipoOtro(val) {
+    const campo = document.getElementById('campoTipoOtro');
+    if (campo) campo.style.display = val === 'otro' ? 'block' : 'none';
 }
 </script>
 {% endblock %}

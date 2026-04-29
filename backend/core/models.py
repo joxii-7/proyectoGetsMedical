@@ -2,10 +2,80 @@ from django.db import models
 import os
 
 
+class Cliente(models.Model):
+    nombre    = models.CharField(max_length=150, unique=True, help_text='Nombre del cliente o institución')
+    ruc       = models.CharField(max_length=20, blank=True, null=True, help_text='RUC o identificación fiscal')
+    direccion = models.CharField(max_length=200, blank=True, null=True)
+    telefono  = models.CharField(max_length=30, blank=True, null=True)
+    contacto  = models.CharField(max_length=100, blank=True, null=True, help_text='Persona de contacto')
+    email     = models.EmailField(blank=True, null=True)
+
+    class Meta:
+        verbose_name        = 'Cliente'
+        verbose_name_plural = 'Clientes'
+        ordering            = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
 class Equipo(models.Model):
+
+    TIPO_CHOICES = [
+        # ── Diagnóstico por imagen ──────────────────────────
+        ('rayos_x',          'Rayos X'),
+        ('tomografo',        'Tomógrafo (CT)'),
+        ('resonancia',       'Resonancia Magnética (RM)'),
+        ('ultrasonido',      'Ultrasonido / Ecógrafo'),
+        ('mamografo',        'Mamógrafo'),
+        ('fluoroscopio',     'Fluoroscopio'),
+        ('densitometro',     'Densitómetro óseo'),
+        ('arco_c',           'Arco en C'),
+        ('angiografo',       'Angiógrafo'),
+        ('pet_scan',         'PET / PET-CT'),
+        # ── Monitoreo y soporte vital ────────────────────────
+        ('monitor',          'Monitor de signos vitales'),
+        ('ventilador',       'Ventilador mecánico'),
+        ('desfibrilador',    'Desfibrilador / DEA'),
+        ('electrocardiografo','Electrocardiógraf (ECG)'),
+        ('oximetro',         'Oxímetro de pulso'),
+        ('bomba_infusion',   'Bomba de infusión'),
+        ('incubadora',       'Incubadora neonatal'),
+        # ── Quirúrgico y electrocirugía ──────────────────────
+        ('electrobisturi',   'Electrobisturí'),
+        ('laser_medico',     'Láser médico'),
+        ('arco_quirurgico',  'Arco quirúrgico'),
+        # ── Laboratorio ──────────────────────────────────────
+        ('analizador',       'Analizador / Autoanalizador'),
+        ('centrifuga',       'Centrífuga'),
+        ('microscopio',      'Microscopio'),
+        ('espectrofotometro','Espectrofotómetro'),
+        ('autoclave',        'Autoclave / Esterilizador'),
+        # ── Rehabilitación ───────────────────────────────────
+        ('ultrasonido_rehab','Ultrasonido terapéutico'),
+        ('electroterapia',   'Electroterapia / TENS'),
+        ('laser_rehab',      'Láser terapéutico'),
+        # ── Odontología ──────────────────────────────────────
+        ('rayos_x_dental',   'Rayos X dental'),
+        ('unidad_dental',    'Unidad odontológica'),
+        # ── Otro ─────────────────────────────────────────────
+        ('otro',             'Otro'),
+    ]
+
     codigo            = models.CharField(max_length=50, unique=True)
     nombre            = models.CharField(max_length=100)
-    tipo              = models.CharField(max_length=50)
+    tipo              = models.CharField(
+                            max_length=50,
+                            choices=TIPO_CHOICES,
+                            default='otro',
+                            help_text='Categoría del equipo biomédico'
+                        )
+    tipo_otro         = models.CharField(
+                            max_length=100,
+                            blank=True,
+                            null=True,
+                            help_text='Especificar si el tipo es "Otro"'
+                        )
     marca             = models.CharField(max_length=50)
     modelo            = models.CharField(max_length=50)
     serie             = models.CharField(max_length=50)
@@ -13,9 +83,46 @@ class Equipo(models.Model):
     estado            = models.CharField(max_length=50)
     fecha_adquisicion = models.DateField(null=True, blank=True)
     criticidad        = models.CharField(max_length=20)
+    usos_mas          = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Número de usos o mAs acumulados del equipo'
+    )
+    cliente           = models.ForeignKey(
+        Cliente,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='equipos',
+        help_text='Cliente o institución propietaria del equipo'
+    )
+    # ── Tubo de rayos X (opcional) ──────────────────────────
+    tubo_modelo       = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Modelo del tubo de rayos X (dejar vacío si no aplica)'
+    )
+    tubo_serie        = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Número de serie del tubo de rayos X (dejar vacío si no aplica)'
+    )
+
+    class Meta:
+        verbose_name        = 'Equipo'
+        verbose_name_plural = 'Equipos'
+        ordering            = ['codigo']
 
     def __str__(self):
-        return self.codigo
+        return f"{self.codigo} — {self.nombre}"
+
+    def tipo_display(self):
+        """Devuelve el tipo legible, usando tipo_otro cuando aplica."""
+        if self.tipo == 'otro':
+            return self.tipo_otro or 'Otro'
+        return self.get_tipo_display() or self.tipo
 
 
 class Tecnico(models.Model):
@@ -30,6 +137,12 @@ class Mantenimiento(models.Model):
         ('preventivo',  'Preventivo'),
         ('correctivo',  'Correctivo'),
         ('predictivo',  'Predictivo'),
+        ('otro',        'Otro'),
+    ]
+
+    ATENCION_CHOICES = [
+        ('presencial', 'Presencial'),
+        ('virtual',    'Virtual'),
     ]
 
     ETIQUETA_CHOICES = [
@@ -42,8 +155,30 @@ class Mantenimiento(models.Model):
 
     equipo      = models.ForeignKey(Equipo, on_delete=models.CASCADE)
     tipo        = models.CharField(max_length=50, choices=TIPO_CHOICES, default='preventivo')
+    tipo_otro   = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Descripción si tipo es "otro"'
+    )
     fecha       = models.DateField()
-    descripcion = models.TextField()
+    tipo_atencion = models.CharField(
+        max_length=20,
+        choices=ATENCION_CHOICES,
+        default='presencial',
+        help_text='Modalidad de atención'
+    )
+    problema    = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Problema o asunto reportado'
+    )
+    solucion    = models.TextField(
+        blank=True,
+        null=True,
+        help_text='Solución aplicada'
+    )
+    descripcion = models.TextField(blank=True, null=True)  # Mantenido por compatibilidad
     tecnico     = models.ForeignKey(Tecnico, on_delete=models.SET_NULL, null=True)
     estado      = models.CharField(max_length=50)
     costo       = models.FloatField()
@@ -84,11 +219,17 @@ class Mantenimiento(models.Model):
     class Meta:
         unique_together = (
             'equipo', 'tipo', 'fecha',
-            'descripcion', 'tecnico', 'estado', 'costo'
+            'tecnico', 'estado', 'costo'
         )
 
     def __str__(self):
-        return f"{self.equipo.codigo} — {self.tipo} ({self.fecha})"
+        return f"{self.equipo.codigo} — {self.tipo_display()} ({self.fecha})"
+
+    def tipo_display(self):
+        """Devuelve el tipo legible, incluyendo 'otro' personalizado."""
+        if self.tipo == 'otro':
+            return self.tipo_otro or 'Otro'
+        return self.get_tipo_display() or self.tipo
 
     def etiqueta_display(self):
         """Devuelve la etiqueta legible de este mantenimiento."""

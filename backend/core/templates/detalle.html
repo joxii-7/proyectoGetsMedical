@@ -18,7 +18,7 @@
     <h2 class="fw-bold mb-3">{{ equipo.nombre }}</h2>
     <div class="row g-3">
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">CÓDIGO</p><p class="fw-bold">{{ equipo.codigo }}</p></div>
-        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">TIPO</p><p class="fw-bold">{{ equipo.tipo }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">TIPO</p><p class="fw-bold">{{ equipo.tipo_display }}</p></div>
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">MARCA</p><p class="fw-bold">{{ equipo.marca }}</p></div>
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">MODELO</p><p class="fw-bold">{{ equipo.modelo }}</p></div>
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">SERIE</p><p class="fw-bold">{{ equipo.serie }}</p></div>
@@ -26,6 +26,31 @@
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">ESTADO</p><p class="fw-bold">{{ equipo.estado }}</p></div>
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">CRITICIDAD</p><p class="fw-bold">{{ equipo.criticidad }}</p></div>
         <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">ADQUISICIÓN</p><p class="fw-bold">{{ equipo.fecha_adquisicion|default:"—" }}</p></div>
+        <div class="col-6 col-md-3"><p class="text-muted mb-0" style="font-size:.8rem">USOS / mAs</p><p class="fw-bold">{{ equipo.usos_mas|default:"—" }}</p></div>
+        <div class="col-6 col-md-3">
+            <p class="text-muted mb-0" style="font-size:.8rem">CLIENTE</p>
+            <p class="fw-bold">
+                {% if equipo.cliente %}
+                <a href="/equipos/?cliente={{ equipo.cliente.id }}" class="text-decoration-none">
+                    {{ equipo.cliente.nombre }}
+                </a>
+                {% else %}—{% endif %}
+            </p>
+        </div>
+        {% if equipo.tubo_modelo or equipo.tubo_serie %}
+        <div class="col-12">
+            <hr class="my-1">
+            <p class="text-muted mb-1" style="font-size:.75rem;letter-spacing:.05em">TUBO DE RAYOS X</p>
+            <div class="d-flex gap-4">
+                {% if equipo.tubo_modelo %}
+                <div><span class="text-muted" style="font-size:.78rem">Modelo:</span> <span class="fw-bold">{{ equipo.tubo_modelo }}</span></div>
+                {% endif %}
+                {% if equipo.tubo_serie %}
+                <div><span class="text-muted" style="font-size:.78rem">N° Serie:</span> <span class="fw-bold">{{ equipo.tubo_serie }}</span></div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -122,7 +147,13 @@
                                         </tr>
                                         <tr>
                                             <th style="background:#f1f5f9;font-size:.82rem">Tipo</th>
-                                            <td style="font-size:.85rem">{{ m.get_tipo_display }}</td>
+                                            <td style="font-size:.85rem">
+                                                {% if m.tipo == 'otro' %}
+                                                    {{ m.tipo_otro|default:"Otro" }}
+                                                {% else %}
+                                                    {{ m.get_tipo_display }}
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                         <tr>
                                             <th style="background:#f1f5f9;font-size:.82rem">Fecha</th>
@@ -137,6 +168,10 @@
                                             <td style="font-size:.85rem">{{ m.tecnico|default:"—" }}</td>
                                         </tr>
                                         <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Tipo atención</th>
+                                            <td style="font-size:.85rem">{{ m.get_tipo_atencion_display|default:"—" }}</td>
+                                        </tr>
+                                        <tr>
                                             <th style="background:#f1f5f9;font-size:.82rem">Estado</th>
                                             <td style="font-size:.85rem">{{ m.estado }}</td>
                                         </tr>
@@ -145,8 +180,16 @@
                                             <td style="font-size:.85rem">${{ m.costo }}</td>
                                         </tr>
                                         <tr>
-                                            <th style="background:#f1f5f9;font-size:.82rem">Descripción</th>
-                                            <td style="font-size:.85rem">{{ m.descripcion|default:"—" }}</td>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Usos / mAs</th>
+                                            <td style="font-size:.85rem">{{ m.equipo.usos_mas|default:"—" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Problema / Asunto</th>
+                                            <td style="font-size:.85rem">{{ m.problema|default:"—" }}</td>
+                                        </tr>
+                                        <tr>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Solución</th>
+                                            <td style="font-size:.85rem">{{ m.solucion|default:"—" }}</td>
                                         </tr>
                                     </table>
                                 </div>

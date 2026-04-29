@@ -1,8 +1,94 @@
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<h2>Subir Excel de Equipos</h2>
+{% extends 'base.html' %}
+{% block title %}Importar Equipos{% endblock %}
 
-<form method="post" enctype="multipart/form-data">
-    {% csrf_token %}
-    <input type="file" name="archivo">
-    <button type="submit">Subir</button>
-</form>
+{% block content %}
+<div class="container-fluid">
+
+    <h2 class="fw-bold mb-4">📥 Importar Equipos desde Excel</h2>
+
+    {% if resultado %}
+    <div class="alert alert-info fw-bold">{{ resultado }}</div>
+    {% endif %}
+
+    <!-- Formulario -->
+    <div class="card p-4 mb-4">
+        <h5 class="mb-3">Seleccionar archivo</h5>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="d-flex gap-3 align-items-end flex-wrap">
+                <div>
+                    <label class="form-label fw-bold">Archivo Excel (.xlsx)</label>
+                    <input type="file" name="archivo" class="form-control"
+                           accept=".xlsx,.xls" required>
+                </div>
+                <button type="submit" class="btn btn-primary">⬆️ Importar</button>
+            </div>
+        </form>
+        <div class="mt-3 text-muted small">
+            <strong>Columnas esperadas:</strong>
+            codigo_equipo, nombre, tipo, marca, modelo, serie, ubicacion, estado,
+            fecha_adquisicion, criticidad
+        </div>
+    </div>
+
+    <!-- Tabla de tipos válidos -->
+    <div class="card p-4">
+        <h5 class="mb-1">📋 Tipos de equipo reconocidos</h5>
+        <p class="text-muted small mb-3">
+            Puedes escribir el <strong>código interno</strong> o cualquiera de los
+            <strong>alias comunes</strong> en la columna <code>tipo</code> de tu Excel.
+            Si el valor no coincide con ninguno, el equipo se guardará como
+            <span class="badge bg-secondary">Otro</span> conservando el texto original.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width:35%">Nombre mostrado</th>
+                        <th style="width:20%">Código interno</th>
+                        <th>Alias aceptados en el Excel</th>
+                    </tr>
+                </thead>
+                <tbody style="font-size:.84rem">
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold">Diagnóstico por imagen</td></tr>
+                    <tr><td>Rayos X</td><td><code>rayos_x</code></td><td>rx, r.x, rayos x, radiografia, rx general</td></tr>
+                    <tr><td>Tomógrafo (CT)</td><td><code>tomografo</code></td><td>ct, tc, tac, scanner, tomografia</td></tr>
+                    <tr><td>Resonancia Magnética</td><td><code>resonancia</code></td><td>rm, mri, resonancia magnetica</td></tr>
+                    <tr><td>Ultrasonido / Ecógrafo</td><td><code>ultrasonido</code></td><td>us, eco, ecografo, ultrasonografia</td></tr>
+                    <tr><td>Mamógrafo</td><td><code>mamografo</code></td><td>mamografia</td></tr>
+                    <tr><td>Fluoroscopio</td><td><code>fluoroscopio</code></td><td>fluoroscopia</td></tr>
+                    <tr><td>Densitómetro óseo</td><td><code>densitometro</code></td><td>dexa, densitometria</td></tr>
+                    <tr><td>Arco en C</td><td><code>arco_c</code></td><td>arco c, c-arm, arco en c</td></tr>
+                    <tr><td>Angiógrafo</td><td><code>angiografo</code></td><td>angiografia</td></tr>
+                    <tr><td>PET / PET-CT</td><td><code>pet_scan</code></td><td>pet, pet-ct</td></tr>
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold">Monitoreo y soporte vital</td></tr>
+                    <tr><td>Monitor de signos vitales</td><td><code>monitor</code></td><td>monitor multiparametrico</td></tr>
+                    <tr><td>Ventilador mecánico</td><td><code>ventilador</code></td><td>respirador</td></tr>
+                    <tr><td>Desfibrilador / DEA</td><td><code>desfibrilador</code></td><td>dea, cardioversor</td></tr>
+                    <tr><td>Electrocardiógrafo (ECG)</td><td><code>electrocardiografo</code></td><td>ecg, ekg</td></tr>
+                    <tr><td>Oxímetro de pulso</td><td><code>oximetro</code></td><td>pulsioximetro</td></tr>
+                    <tr><td>Bomba de infusión</td><td><code>bomba_infusion</code></td><td>bomba, bomba de infusion</td></tr>
+                    <tr><td>Incubadora neonatal</td><td><code>incubadora</code></td><td>incubadora</td></tr>
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold">Quirúrgico</td></tr>
+                    <tr><td>Electrobisturí</td><td><code>electrobisturi</code></td><td>bisturi electrico</td></tr>
+                    <tr><td>Autoclave / Esterilizador</td><td><code>autoclave</code></td><td>esterilizador</td></tr>
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold">Laboratorio</td></tr>
+                    <tr><td>Analizador</td><td><code>analizador</code></td><td>autoanalizador</td></tr>
+                    <tr><td>Centrífuga</td><td><code>centrifuga</code></td><td>—</td></tr>
+                    <tr><td>Microscopio</td><td><code>microscopio</code></td><td>—</td></tr>
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold">Odontología</td></tr>
+                    <tr><td>Rayos X dental</td><td><code>rayos_x_dental</code></td><td>rx dental, dental rx</td></tr>
+                    <tr><td>Unidad odontológica</td><td><code>unidad_dental</code></td><td>sillon dental</td></tr>
+                    <tr class="table-secondary"><td colspan="3" class="fw-bold"></td></tr>
+                    <tr>
+                        <td><span class="badge bg-secondary">Otro</span></td>
+                        <td><code>otro</code></td>
+                        <td class="text-muted fst-italic">Cualquier valor no reconocido — se conserva el texto original</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

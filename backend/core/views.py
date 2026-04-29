@@ -2,7 +2,7 @@ import pandas as pd
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
 from django.http import HttpResponse
-from .models import Equipo, Mantenimiento, Tecnico, Documento
+from .models import Cliente, Equipo, Mantenimiento, Tecnico, Documento
 from datetime import date, timedelta
 from django.db.models import Count, Q
 import json
@@ -23,16 +23,33 @@ def home(request):
 #  EQUIPOS
 # ──────────────────────────────────────────
 def lista_equipos(request):
-    q = request.GET.get('q', '').strip()
-    equipos = Equipo.objects.filter(
-        Q(nombre__icontains=q) |
-        Q(codigo__icontains=q) |
-        Q(tipo__icontains=q) |
-        Q(marca__icontains=q) |
-        Q(modelo__icontains=q) |
-        Q(ubicacion__icontains=q)
-    ) if q else Equipo.objects.all()
-    return render(request, 'lista.html', {'equipos': equipos})
+    q          = request.GET.get('q', '').strip()
+    cliente_id = request.GET.get('cliente', '').strip()
+
+    equipos = Equipo.objects.select_related('cliente').all()
+
+    if q:
+        equipos = equipos.filter(
+            Q(nombre__icontains=q) |
+            Q(codigo__icontains=q) |
+            Q(tipo__icontains=q) |
+            Q(tipo_otro__icontains=q) |
+            Q(marca__icontains=q) |
+            Q(modelo__icontains=q) |
+            Q(ubicacion__icontains=q) |
+            Q(cliente__nombre__icontains=q)
+        )
+
+    if cliente_id:
+        equipos = equipos.filter(cliente__id=cliente_id)
+
+    clientes = Cliente.objects.order_by('nombre')
+
+    return render(request, 'lista.html', {
+        'equipos':     equipos,
+        'clientes':    clientes,
+        'cliente_sel': cliente_id,
+    })
 
 
 def detalle_equipo(request, id):
@@ -57,11 +74,15 @@ def editar_mantenimiento(request, id):
     mantenimiento = get_object_or_404(Mantenimiento, id=id)
 
     if request.method == 'POST':
-        mantenimiento.tipo        = request.POST.get('tipo', mantenimiento.tipo)
-        mantenimiento.fecha       = request.POST.get('fecha', mantenimiento.fecha)
-        mantenimiento.descripcion = request.POST.get('descripcion', mantenimiento.descripcion)
-        mantenimiento.estado      = request.POST.get('estado', mantenimiento.estado)
-        mantenimiento.costo       = float(request.POST.get('costo') or mantenimiento.costo)
+        mantenimiento.tipo          = request.POST.get('tipo', mantenimiento.tipo)
+        mantenimiento.tipo_otro     = request.POST.get('tipo_otro', '').strip() or None
+        mantenimiento.fecha         = request.POST.get('fecha', mantenimiento.fecha)
+        mantenimiento.tipo_atencion = request.POST.get('tipo_atencion', 'presencial')
+        mantenimiento.problema      = request.POST.get('problema', '').strip() or None
+        mantenimiento.solucion      = request.POST.get('solucion', '').strip() or None
+        mantenimiento.descripcion   = request.POST.get('descripcion', '').strip() or None
+        mantenimiento.estado        = request.POST.get('estado', mantenimiento.estado)
+        mantenimiento.costo         = float(request.POST.get('costo') or mantenimiento.costo)
 
         # Etiqueta de este mantenimiento
         mantenimiento.etiqueta      = request.POST.get('etiqueta') or None
@@ -72,6 +93,12 @@ def editar_mantenimiento(request, id):
         mantenimiento.fecha_proximo         = fecha_prox or None
         mantenimiento.etiqueta_proximo      = request.POST.get('etiqueta_proximo') or None
         mantenimiento.etiqueta_proximo_otro = request.POST.get('etiqueta_proximo_otro', '').strip() or None
+
+        # usos/mAs del equipo
+        usos_mas = request.POST.get('usos_mas', '').strip()
+        if usos_mas:
+            mantenimiento.equipo.usos_mas = int(usos_mas)
+            mantenimiento.equipo.save(update_fields=['usos_mas'])
 
         tecnico_id = request.POST.get('tecnico')
         if tecnico_id:
@@ -85,6 +112,8 @@ def editar_mantenimiento(request, id):
         'm':       mantenimiento,
         'tecnicos': Tecnico.objects.all(),
         'etiqueta_choices': Mantenimiento.ETIQUETA_CHOICES,
+        'tipo_choices': Mantenimiento.TIPO_CHOICES,
+        'atencion_choices': Mantenimiento.ATENCION_CHOICES,
     })
 
 
@@ -181,7 +210,16 @@ def dashboard(request):
         .order_by('-fecha')[:5]
     )
 
-    tipos  = Equipo.objects.values('tipo').annotate(total=Count('tipo'))
+    tipos_raw = Equipo.objects.values('tipo').annotate(total=Count('tipo'))
+    # Convertir el código interno al nombre legible usando TIPO_CHOICES
+    tipo_map = dict(Equipo.TIPO_CHOICES)
+    tipos = [
+        {
+            'tipo':  tipo_map.get(t['tipo'], t['tipo']),   # label o raw si no existe
+            'total': t['total'],
+        }
+        for t in tipos_raw
+    ]
     labels = json.dumps([t['tipo'] for t in tipos])
     data   = json.dumps([t['total'] for t in tipos])
 
@@ -253,26 +291,134 @@ def alertas(request):
 # ──────────────────────────────────────────
 #  SUBIR EQUIPOS
 # ──────────────────────────────────────────
+
+# Tabla de normalización: texto libre del Excel → valor interno del choice
+_TIPO_NORMALIZAR = {
+    # Rayos X
+    'rx': 'rayos_x', 'r.x': 'rayos_x', 'rayx': 'rayos_x',
+    'rayos x': 'rayos_x', 'rayos-x': 'rayos_x', 'radiografia': 'rayos_x',
+    'radiografía': 'rayos_x', 'rx general': 'rayos_x',
+    # Tomógrafo
+    'ct': 'tomografo', 'tc': 'tomografo', 'tomografo': 'tomografo',
+    'tomógrafo': 'tomografo', 'tac': 'tomografo', 'scanner': 'tomografo',
+    'tomografia': 'tomografo', 'tomografía': 'tomografo',
+    # RM
+    'rm': 'resonancia', 'mri': 'resonancia', 'resonancia': 'resonancia',
+    'resonancia magnetica': 'resonancia', 'resonancia magnética': 'resonancia',
+    # Ultrasonido
+    'us': 'ultrasonido', 'eco': 'ultrasonido', 'ecografo': 'ultrasonido',
+    'ecógrafo': 'ultrasonido', 'ultrasonido': 'ultrasonido',
+    'ultrasonografia': 'ultrasonido', 'ultrasonografía': 'ultrasonido',
+    # Mamógrafo
+    'mamografo': 'mamografo', 'mamógrafo': 'mamografo', 'mamografia': 'mamografo',
+    'mamografía': 'mamografo',
+    # Fluoroscopio
+    'fluoroscopio': 'fluoroscopio', 'fluoroscopia': 'fluoroscopio',
+    # Densitómetro
+    'densitometro': 'densitometro', 'densitómetro': 'densitometro',
+    'densitometria': 'densitometro', 'dexa': 'densitometro',
+    # Arco en C
+    'arco c': 'arco_c', 'arco en c': 'arco_c', 'arco-c': 'arco_c',
+    'c-arm': 'arco_c', 'c arm': 'arco_c',
+    # Angiógrafo
+    'angiografo': 'angiografo', 'angiógrafo': 'angiografo',
+    'angiografia': 'angiografo', 'angiografía': 'angiografo',
+    # PET
+    'pet': 'pet_scan', 'pet-ct': 'pet_scan', 'pet ct': 'pet_scan',
+    # Monitor
+    'monitor': 'monitor', 'monitor de signos': 'monitor',
+    'monitor multiparametrico': 'monitor', 'monitor multiparamétrico': 'monitor',
+    # Ventilador
+    'ventilador': 'ventilador', 'respirador': 'ventilador',
+    # Desfibrilador
+    'desfibrilador': 'desfibrilador', 'dea': 'desfibrilador',
+    'cardioversor': 'desfibrilador',
+    # ECG
+    'ecg': 'electrocardiografo', 'ekg': 'electrocardiografo',
+    'electrocardiografo': 'electrocardiografo',
+    'electrocardiógraf': 'electrocardiografo',
+    # Oxímetro
+    'oximetro': 'oximetro', 'oxímetro': 'oximetro', 'pulsioximetro': 'oximetro',
+    # Bomba
+    'bomba de infusion': 'bomba_infusion', 'bomba de infusión': 'bomba_infusion',
+    'bomba infusion': 'bomba_infusion', 'bomba': 'bomba_infusion',
+    # Incubadora
+    'incubadora': 'incubadora',
+    # Electrobisturí
+    'electrobisturi': 'electrobisturi', 'electrobisturí': 'electrobisturi',
+    'bisturi electrico': 'electrobisturi', 'bisturí eléctrico': 'electrobisturi',
+    # Autoclave
+    'autoclave': 'autoclave', 'esterilizador': 'autoclave',
+    # Analizador
+    'analizador': 'analizador', 'autoanalizador': 'analizador',
+    # Centrífuga
+    'centrifuga': 'centrifuga', 'centrífuga': 'centrifuga',
+    # Microscopio
+    'microscopio': 'microscopio',
+    # Rayos X dental
+    'rx dental': 'rayos_x_dental', 'rayos x dental': 'rayos_x_dental',
+    'dental rx': 'rayos_x_dental',
+    # Unidad dental
+    'unidad dental': 'unidad_dental', 'sillon dental': 'unidad_dental',
+    'sillón dental': 'unidad_dental',
+}
+
+# Valores internos válidos (para cuando el Excel ya trae el código correcto)
+_TIPOS_VALIDOS = {v for v, _ in Equipo.TIPO_CHOICES}
+
+
+def _normalizar_tipo(raw):
+    """Convierte texto libre del Excel al valor interno del choice, o 'otro'."""
+    clave = str(raw).strip().lower()
+    if clave in _TIPOS_VALIDOS:
+        return clave, None          # ya venía correcto
+    normalizado = _TIPO_NORMALIZAR.get(clave)
+    if normalizado:
+        return normalizado, None
+    return 'otro', str(raw).strip() # desconocido → 'otro' + guardar texto original
+
+
 def subir_equipos(request):
+    resultado = None
     if request.method == 'POST':
-        archivo = request.FILES['archivo']
-        df = pd.read_excel(archivo)
-        for _, row in df.iterrows():
-            Equipo.objects.update_or_create(
-                codigo=row['codigo_equipo'],
-                defaults={
-                    'nombre':            row['nombre'],
-                    'tipo':              row['tipo'],
-                    'marca':             row['marca'],
-                    'modelo':            row['modelo'],
-                    'serie':             row['serie'],
-                    'ubicacion':         row['ubicacion'],
-                    'estado':            row['estado'],
-                    'fecha_adquisicion': row['fecha_adquisicion'],
-                    'criticidad':        row['criticidad'],
-                }
+        archivo = request.FILES.get('archivo')
+        if archivo:
+            df = pd.read_excel(archivo)
+            df.columns = df.columns.str.strip().str.lower()
+            creados = actualizados = errores = 0
+            for _, row in df.iterrows():
+                try:
+                    tipo_raw = row.get('tipo', '')
+                    tipo_val, tipo_otro_val = _normalizar_tipo(tipo_raw)
+
+                    Equipo.objects.update_or_create(
+                        codigo=str(row['codigo_equipo']).strip(),
+                        defaults={
+                            'nombre':            str(row['nombre']).strip(),
+                            'tipo':              tipo_val,
+                            'tipo_otro':         tipo_otro_val,
+                            'marca':             str(row.get('marca', '')).strip(),
+                            'modelo':            str(row.get('modelo', '')).strip(),
+                            'serie':             str(row.get('serie', '')).strip(),
+                            'ubicacion':         str(row.get('ubicacion', '')).strip(),
+                            'estado':            str(row.get('estado', '')).strip(),
+                            'fecha_adquisicion': row.get('fecha_adquisicion') or None,
+                            'criticidad':        str(row.get('criticidad', '')).strip(),
+                        }
+                    )
+                    creados += 1
+                except Exception:
+                    errores += 1
+
+            resultado = (
+                f'✔ {creados} equipo(s) importado(s) correctamente'
+                + (f' | ❌ {errores} con error' if errores else '')
             )
-    return render(request, 'subir.html')
+
+    return render(request, 'subir.html', {
+        'resultado': resultado,
+        'TIPO_CHOICES': Equipo.TIPO_CHOICES,
+    })
 
 
 # ──────────────────────────────────────────
@@ -285,26 +431,37 @@ def subir_mantenimientos(request):
         'tecnicos': Tecnico.objects.all(),
         'equipos':  Equipo.objects.all(),
         'TIPO_CHOICES': Mantenimiento.TIPO_CHOICES,
+        'ATENCION_CHOICES': Mantenimiento.ATENCION_CHOICES,
     }
 
     if request.method == 'POST' and request.POST.get('form_manual'):
-        codigo      = request.POST.get('codigo_equipo')
-        tipo        = request.POST.get('tipo')
-        fecha       = request.POST.get('fecha')
-        descripcion = request.POST.get('descripcion')
-        tecnico_id  = request.POST.get('tecnico')
-        estado      = request.POST.get('estado')
-        costo       = request.POST.get('costo')
+        codigo        = request.POST.get('codigo_equipo')
+        tipo          = request.POST.get('tipo')
+        tipo_otro     = request.POST.get('tipo_otro', '').strip() or None
+        fecha         = request.POST.get('fecha')
+        tipo_atencion = request.POST.get('tipo_atencion', 'presencial')
+        problema      = request.POST.get('problema', '').strip() or None
+        solucion      = request.POST.get('solucion', '').strip() or None
+        descripcion   = request.POST.get('descripcion', '').strip() or None
+        tecnico_id    = request.POST.get('tecnico')
+        estado        = request.POST.get('estado')
+        costo         = request.POST.get('costo')
+        usos_mas      = request.POST.get('usos_mas', '').strip()
 
         # Guardar valores del formulario para mantenerlos en caso de error
         context['form_data'] = {
             'codigo_equipo': codigo,
             'tipo': tipo,
+            'tipo_otro': tipo_otro,
             'fecha': fecha,
+            'tipo_atencion': tipo_atencion,
+            'problema': problema,
+            'solucion': solucion,
             'descripcion': descripcion,
             'tecnico': tecnico_id,
             'estado': estado,
             'costo': costo,
+            'usos_mas': usos_mas,
         }
 
         # Validar que tipo no esté vacío
@@ -344,11 +501,17 @@ def subir_mantenimientos(request):
             return render(request, 'subir_mantenimientos.html', context)
 
         try:
-            Mantenimiento.objects.create(
-                equipo=equipo, tipo=tipo, fecha=fecha,
+            nuevo = Mantenimiento.objects.create(
+                equipo=equipo, tipo=tipo, tipo_otro=tipo_otro,
+                fecha=fecha, tipo_atencion=tipo_atencion,
+                problema=problema, solucion=solucion,
                 descripcion=descripcion, tecnico=tecnico,
                 estado=estado, costo=float(costo or 0),
             )
+            # Actualizar usos/mAs del equipo si se proporcionó
+            if usos_mas:
+                equipo.usos_mas = int(usos_mas)
+                equipo.save(update_fields=['usos_mas'])
             context['mensaje'] = '✔ Mantenimiento registrado correctamente'
             # Limpiar formulario después de éxito
             if 'form_data' in context:
