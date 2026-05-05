@@ -1,6 +1,9 @@
 from django.contrib import admin
 from django.db import models as dj_models
-from .models import Cliente, Equipo, Tecnico, Mantenimiento, Documento
+from .models import (
+    Cliente, Equipo, Tecnico, Mantenimiento, Documento,
+    SubtareaPlantilla, SubtareaEjecucion,
+)
 
 
 # ──────────────────────────────────────────
@@ -21,7 +24,6 @@ class ClienteAdmin(admin.ModelAdmin):
 #  EQUIPO
 # ──────────────────────────────────────────
 class TuboRXFilter(admin.SimpleListFilter):
-    """Filtra equipos que tienen o no tienen datos de tubo de rayos X."""
     title          = 'Tubo de rayos X'
     parameter_name = 'tiene_tubo'
 
@@ -66,8 +68,7 @@ class EquipoAdmin(admin.ModelAdmin):
         }),
         ('Tubo de Rayos X', {
             'classes': ('collapse',),
-            'description': 'Completar solo si el equipo posee un tubo de rayos X '
-                           '(rayos X convencional, tomógrafo, arco en C, etc.). '
+            'description': 'Completar solo si el equipo posee un tubo de rayos X. '
                            'Dejar vacío si no aplica.',
             'fields': ('tubo_modelo', 'tubo_serie'),
         }),
@@ -125,3 +126,40 @@ class DocumentoAdmin(admin.ModelAdmin):
     list_filter   = ('tipo',)
     search_fields = ('nombre', 'subido_por', 'mantenimiento__equipo__nombre',
                      'mantenimiento__equipo__cliente__nombre')
+
+
+# ──────────────────────────────────────────
+#  SUBTAREAS PLANTILLA
+#  Permite añadir/editar/eliminar subtareas
+#  por tipo de equipo desde el admin.
+# ──────────────────────────────────────────
+@admin.register(SubtareaPlantilla)
+class SubtareaPlantillaAdmin(admin.ModelAdmin):
+    list_display   = ('tipo_equipo', 'nombre', 'orden', 'activa')
+    list_filter    = ('tipo_equipo', 'activa')
+    search_fields  = ('nombre',)
+    list_editable  = ('orden', 'activa')
+    ordering       = ('tipo_equipo', 'orden', 'nombre')
+
+    fieldsets = (
+        (None, {
+            'fields': ('tipo_equipo', 'nombre', 'orden', 'activa'),
+            'description': (
+                'Define las subtareas (checklist) estándar para cada tipo de equipo. '
+                'Al abrir el panel de subtareas de un mantenimiento por primera vez, '
+                'estas plantillas se copian automáticamente.'
+            ),
+        }),
+    )
+
+
+# ──────────────────────────────────────────
+#  SUBTAREAS EJECUCION (solo lectura útil)
+# ──────────────────────────────────────────
+@admin.register(SubtareaEjecucion)
+class SubtareaEjecucionAdmin(admin.ModelAdmin):
+    list_display  = ('mantenimiento', 'plantilla', 'completada', 'fecha_check', 'nota')
+    list_filter   = ('completada', 'plantilla__tipo_equipo')
+    search_fields = ('mantenimiento__equipo__nombre', 'plantilla__nombre', 'nota')
+    readonly_fields = ('fecha_check',)
+    ordering      = ('-mantenimiento__fecha', 'plantilla__orden')

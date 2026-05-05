@@ -113,6 +113,64 @@
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════════
+         MINI CALENDARIO DEL MES ACTUAL
+    ══════════════════════════════════════════════════ -->
+    <div class="card p-4 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0 fw-bold">📅 Actividad del Mes</h5>
+                <p class="text-muted small mb-0" id="miniCalLabel">Cargando...</p>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <div style="display:flex;gap:0;background:#f1f5f9;border-radius:10px;overflow:hidden">
+                    <button onclick="miniNavMes(-1)"
+                            style="border:none;background:transparent;padding:6px 12px;cursor:pointer;color:#475569;font-size:.9rem">‹</button>
+                    <span id="miniMonthLabel"
+                          style="padding:6px 12px;font-size:.82rem;font-weight:600;color:#1e293b;min-width:120px;text-align:center;font-family:monospace"></span>
+                    <button onclick="miniNavMes(1)"
+                            style="border:none;background:transparent;padding:6px 12px;cursor:pointer;color:#475569;font-size:.9rem">›</button>
+                </div>
+                <a href="/calendario/" class="btn btn-sm btn-outline-primary">
+                    Ver calendario completo →
+                </a>
+            </div>
+        </div>
+
+        <!-- Mini grid -->
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:560px">
+            <thead>
+                <tr id="miniCalHead">
+                    {% for d in 'DLMXJVS' %}
+                    <th style="text-align:center;font-size:.7rem;font-weight:600;
+                               color:#94a3b8;padding:6px 2px;letter-spacing:.04em">
+                        {{ d }}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody id="miniCalBody"></tbody>
+        </table>
+        </div>
+
+        <!-- Leyenda mini -->
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px">
+            <span style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#475569">
+                <span style="width:9px;height:9px;border-radius:3px;background:#16a34a;display:inline-block"></span>Completado
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#475569">
+                <span style="width:9px;height:9px;border-radius:3px;background:#d97706;display:inline-block"></span>Pendiente
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#475569">
+                <span style="width:9px;height:9px;border-radius:3px;background:#0284c7;display:inline-block"></span>Próximo
+            </span>
+            <span style="display:flex;align-items:center;gap:4px;font-size:.72rem;color:#475569">
+                <span style="width:9px;height:9px;border-radius:3px;background:#7c3aed;display:inline-block"></span>Prog. serie
+            </span>
+        </div>
+    </div>
+
 </div>
 
 <!-- ═══════════════════════════════════════════
@@ -249,7 +307,6 @@
                             <th>Tipo</th>
                             <th>Fecha</th>
                             <th>Técnico</th>
-                            <th>Costo</th>
                             <th>Acción</th>
                         </tr>
                     </thead>
@@ -264,7 +321,6 @@
                             <td>{{ m.get_tipo_display }}</td>
                             <td>{{ m.fecha }}</td>
                             <td>{{ m.tecnico|default:"—" }}</td>
-                            <td>${{ m.costo }}</td>
                             <td>
                                 <a href="/mantenimiento/{{ m.id }}/editar/"
                                    class="btn btn-sm btn-outline-primary">
@@ -274,7 +330,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted">
+                            <td colspan="5" class="text-center text-muted">
                                 Sin realizados
                             </td>
                         </tr>
@@ -291,31 +347,126 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// ── Gráfico doughnut ─────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function () {
     const canvas = document.getElementById('grafico');
     if (!canvas) return;
-
     const chartLabels = {{ labels|safe }};
     const chartData   = {{ data|safe }};
-
     new Chart(canvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: chartLabels,
             datasets: [{
                 data: chartData,
-                backgroundColor: [
-                    '#3b82f6','#10b981','#f59e0b',
-                    '#ef4444','#8b5cf6','#06b6d4'
-                ]
+                backgroundColor: ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4']
             }]
         },
         options: {
-            responsive: true,
-            maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: false,
             plugins: { legend: { position: 'bottom' } }
         }
     });
 });
+
+// ══════════════════════════════════════════════════════════
+//  MINI CALENDARIO
+// ══════════════════════════════════════════════════════════
+const MANT_DATA = [
+    {% for m in todos_mantenimientos_mes %}
+    {
+        fecha:     "{{ m.fecha|date:'Y-m-d' }}",
+        equipo:    "{{ m.equipo.nombre|escapejs }}",
+        tipo:      "{{ m.tipo_display|escapejs }}",
+        estado:    "{{ m.estado|lower }}",
+        programado: {{ m.programado|yesno:"true,false" }},
+    },
+    {% endfor %}
+];
+
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const hoy = new Date();
+let miniYear  = hoy.getFullYear();
+let miniMonth = hoy.getMonth();
+
+function dotColor(m) {
+    if (m.programado && m.estado === 'pendiente') return '#7c3aed';
+    return { completado:'#16a34a', pendiente:'#d97706', proximo:'#0284c7', cancelado:'#dc2626' }[m.estado] || '#94a3b8';
+}
+
+function renderMiniCal() {
+    const label = `${MESES_ES[miniMonth]} ${miniYear}`;
+    document.getElementById('miniMonthLabel').textContent = label;
+
+    // Filtrar por mes
+    const prefix = `${miniYear}-${String(miniMonth+1).padStart(2,'0')}-`;
+    const mesData = MANT_DATA.filter(m => m.fecha.startsWith(prefix));
+    const total   = mesData.length;
+    document.getElementById('miniCalLabel').textContent =
+        `${total} mantenimiento${total !== 1 ? 's' : ''} en ${label}`;
+
+    // Agrupar por día
+    const porDia = {};
+    mesData.forEach(m => {
+        const d = parseInt(m.fecha.split('-')[2]);
+        porDia[d] = porDia[d] || [];
+        porDia[d].push(m);
+    });
+
+    const primerDia  = new Date(miniYear, miniMonth, 1).getDay();
+    const diasEnMes  = new Date(miniYear, miniMonth + 1, 0).getDate();
+    const totalCeldas = Math.ceil((primerDia + diasEnMes) / 7) * 7;
+
+    let html = '';
+    for (let i = 0; i < totalCeldas; i += 7) {
+        html += '<tr>';
+        for (let j = 0; j < 7; j++) {
+            const pos = i + j;
+            const dia = pos - primerDia + 1;
+            const esHoyDia = miniYear === hoy.getFullYear() && miniMonth === hoy.getMonth() && dia === hoy.getDate();
+            const fuera    = dia < 1 || dia > diasEnMes;
+            const mants    = fuera ? [] : (porDia[dia] || []);
+
+            // Dots: máximo 4 puntos de colores distintos
+            const dots = mants.slice(0, 4).map(m =>
+                `<span style="width:7px;height:7px;border-radius:50%;background:${dotColor(m)};display:inline-block;margin:0 1px"></span>`
+            ).join('');
+            const extra = mants.length > 4
+                ? `<span style="font-size:.55rem;color:#94a3b8;font-weight:700">+${mants.length-4}</span>`
+                : '';
+
+            const bgToday  = esHoyDia  ? 'background:#2cb681;color:#fff;border-radius:50%;' : '';
+            const colorFuera = fuera   ? 'color:#e2e8f0;' : '';
+
+            html += `
+            <td style="text-align:center;padding:4px 2px;vertical-align:top;min-width:48px">
+                ${!fuera ? `
+                <a href="/calendario/" style="text-decoration:none">
+                    <div style="display:inline-flex;align-items:center;justify-content:center;
+                                width:26px;height:26px;${bgToday}font-size:.78rem;
+                                font-weight:${esHoyDia?'700':'500'};${colorFuera}
+                                color:${esHoyDia?'#fff':'#374151'};margin:0 auto">
+                        ${dia}
+                    </div>
+                    <div style="display:flex;justify-content:center;flex-wrap:wrap;margin-top:2px;min-height:12px">
+                        ${dots}${extra}
+                    </div>
+                </a>` : `<div style="height:38px"></div>`}
+            </td>`;
+        }
+        html += '</tr>';
+    }
+    document.getElementById('miniCalBody').innerHTML = html;
+}
+
+function miniNavMes(dir) {
+    miniMonth += dir;
+    if (miniMonth > 11) { miniMonth = 0;  miniYear++; }
+    if (miniMonth < 0)  { miniMonth = 11; miniYear--; }
+    renderMiniCal();
+}
+
+renderMiniCal();
 </script>
 {% endblock %}

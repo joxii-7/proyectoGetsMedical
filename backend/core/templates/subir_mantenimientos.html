@@ -107,7 +107,22 @@
     .btn-mant-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(44,182,129,.45); }
     .btn-mant-submit:active { transform: translateY(0); }
 
-    /* Excel upload */
+    /* ── Programado info box ── */
+    .prog-info-box {
+        background: linear-gradient(135deg, #eff6ff, #dbeafe);
+        border: 1.5px solid #93c5fd; border-radius: 14px;
+        padding: 16px 20px; margin-bottom: 20px; font-size: .88rem; color: #1e40af;
+    }
+    .prog-info-box strong { color: #1d4ed8; }
+    .prog-preview-table th {
+        background: #1d4ed8; color: #fff;
+        font-size: .75rem; text-transform: uppercase; letter-spacing: .06em;
+        padding: 10px 14px;
+    }
+    .prog-preview-table td { font-size: .88rem; padding: 9px 14px; }
+    .prog-preview-table tr:nth-child(even) td { background: #f8fafc; }
+
+    /* upload zone */
     .upload-zone {
         border: 2px dashed #cbd5e1; border-radius: 16px; padding: 44px 24px;
         text-align: center; background: #f8fafc; cursor: pointer;
@@ -120,7 +135,6 @@
     .upload-sub { font-size: .82rem; color: #94a3b8; }
     .upload-actions { display: flex; gap: 10px; margin-top: 20px; }
 
-    /* Column chips */
     .col-chip-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
     .col-chip {
         font-size: .78rem; font-weight: 600; padding: 4px 12px;
@@ -129,7 +143,6 @@
     .col-chip.ok    { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
     .col-chip.miss  { background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
     .col-chip.extra { background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; }
-    .col-chip.opt   { background:#f8fafc; color:#64748b; border:1px dashed #cbd5e1; opacity:.8; }
 
     .preview-table thead th {
         font-size: .75rem; font-weight: 700; text-transform: uppercase;
@@ -157,23 +170,184 @@
         {% endif %}
     {% endif %}
 
-    <!-- Tabs — Excel queda activo si hay preview -->
+    <!-- ════ TABS PRINCIPALES ════ -->
     <div class="mant-tabs">
-        <button class="mant-tab {% if not preview %}active{% endif %}"
-                onclick="switchTab('manual',this)" id="tab-manual">
-            ✏️ Registro manual
+        <button class="mant-tab {% if tab_activo == 'programado' %}active{% else %}{% if not tab_activo %}active{% endif %}{% endif %}"
+                onclick="switchTab('programado',this)" id="tab-programado">
+            📅 Programado
         </button>
-        <button class="mant-tab {% if preview %}active{% endif %}"
+        <button class="mant-tab {% if tab_activo == 'noprogramado' %}active{% endif %}"
+                onclick="switchTab('noprogramado',this)" id="tab-noprogramado">
+            ⚡ No programado
+        </button>
+        <button class="mant-tab {% if tab_activo == 'excel' or preview %}active{% endif %}"
                 onclick="switchTab('excel',this)" id="tab-excel">
             📊 Importar Excel
         </button>
     </div>
 
 
-    <!-- ══════════════════════════════════════
-         PANEL MANUAL
-    ══════════════════════════════════════ -->
-    <div id="panel-manual" class="mant-panel {% if not preview %}active{% endif %}">
+    <!-- ══════════════════════════════════════════════════
+         PANEL: PROGRAMADO
+         Genera automáticamente N mantenimientos en el año
+    ══════════════════════════════════════════════════ -->
+    <div id="panel-programado"
+         class="mant-panel {% if tab_activo == 'programado' or not tab_activo %}active{% endif %}">
+
+        <div class="prog-info-box">
+            <strong>📅 Mantenimiento programado</strong><br>
+            Indica la periodicidad y la fecha de inicio. El sistema generará automáticamente
+            todos los mantenimientos del año con estado <em>pendiente</em>, listos para ser
+            completados cuando se realicen. Dentro de cada tipo programado puedes indicar
+            si es preventivo, correctivo, etc.
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="form_programado" value="1">
+
+            <!-- EQUIPO -->
+            <div class="form-section">
+                <div class="section-label">🔍 Equipo</div>
+                <div class="row g-4">
+                    <div class="col-md-5">
+                        <label class="form-label">Código del equipo *</label>
+                        <input list="listaEquiposProg" id="codigoEquipoProg" name="codigo_equipo"
+                               class="form-control" placeholder="Ej: EQ-0042"
+                               autocomplete="off" required
+                               value="{{ form_prog.codigo_equipo|default:'' }}">
+                        <datalist id="listaEquiposProg">
+                            {% for e in equipos %}<option value="{{ e.codigo }}">{% endfor %}
+                        </datalist>
+                        <div class="equipo-not-found" id="equipoNotFoundProg">
+                            ✗ Código no encontrado
+                        </div>
+                        <div class="equipo-info-badge" id="equipoBadgeProg">
+                            <div class="eq-nombre" id="equipoNombreProg">—</div>
+                            <div class="eq-meta">
+                                <span>Tipo: <strong id="equipoTipoProg">—</strong></span>
+                                <span>Ubicación: <strong id="equipoUbicacionProg">—</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Ciudad / Lugar *</label>
+                        <input type="text" name="ciudad" class="form-control"
+                               placeholder="Ej: Guayaquil, Quito..."
+                               value="{{ form_prog.ciudad|default:'' }}" required>
+                        <div class="form-text">Ubicación geográfica del servicio</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Técnico asignado</label>
+                        <select name="tecnico" class="form-select">
+                            <option value="">Sin asignar</option>
+                            {% for t in tecnicos %}
+                            <option value="{{ t.id }}"
+                                {% if form_prog.tecnico == t.id|stringformat:"s" %}selected{% endif %}>
+                                {{ t.nombre }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PERIODICIDAD Y TIPO -->
+            <div class="form-section">
+                <div class="section-label">🔄 Periodicidad y tipo</div>
+                <div class="row g-4">
+
+                    <div class="col-md-3">
+                        <label class="form-label">Periodicidad *</label>
+                        <select name="etiqueta" class="form-select" id="selectEtiquetaProg"
+                                onchange="actualizarPreviewProg()" required>
+                            <option value="">Seleccionar...</option>
+                            {% for val, label in ETIQUETA_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_prog.etiqueta == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Fecha de inicio *</label>
+                        <input type="date" name="fecha_inicio" id="fechaInicioProg"
+                               class="form-control" required
+                               value="{{ form_prog.fecha_inicio|default:'' }}"
+                               onchange="actualizarPreviewProg()">
+                        <div class="form-text">Primer mantenimiento del ciclo</div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo de mantenimiento</label>
+                        <select name="tipo" class="form-select"
+                                onchange="animarOtro(this.value,'campoTipoOtroProg')">
+                            {% for val, label in TIPO_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_prog.tipo == val or val == 'preventivo' and not form_prog.tipo %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo de atención</label>
+                        <select name="tipo_atencion" class="form-select">
+                            {% for val, label in ATENCION_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_prog.tipo_atencion == val or val == 'presencial' and not form_prog.tipo_atencion %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="col-md-4 campo-otro {% if form_prog.tipo == 'otro' %}visible{% endif %}"
+                         id="campoTipoOtroProg">
+                        <label class="form-label">Especificar tipo</label>
+                        <input type="text" name="tipo_otro" class="form-control"
+                               placeholder="Ej: Calibración, Ajuste..."
+                               value="{{ form_prog.tipo_otro|default:'' }}">
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- PREVIEW DE FECHAS GENERADAS -->
+            <div class="form-section" id="seccionPreviewProg" style="display:none">
+                <div class="section-label">📋 Mantenimientos que se crearán</div>
+                <div id="previewProgContenido"></div>
+            </div>
+
+            <!-- BOTÓN -->
+            <div class="d-flex align-items-center gap-3 mt-2">
+                <button type="submit" class="btn-mant-submit">
+                    📅 Generar mantenimientos programados
+                </button>
+                <span class="text-muted" style="font-size:.82rem">
+                    Se crearán con estado <strong>pendiente</strong> automáticamente
+                </span>
+            </div>
+
+        </form>
+    </div><!-- /panel-programado -->
+
+
+    <!-- ══════════════════════════════════════════════════
+         PANEL: NO PROGRAMADO (imprevistos)
+    ══════════════════════════════════════════════════ -->
+    <div id="panel-noprogramado"
+         class="mant-panel {% if tab_activo == 'noprogramado' %}active{% endif %}">
+
+        <div class="prog-info-box" style="background:linear-gradient(135deg,#fff7ed,#fed7aa);border-color:#fdba74;color:#9a3412">
+            <strong>⚡ Mantenimiento no programado</strong><br>
+            Para imprevistos, correctivos urgentes o cualquier intervención que no forma parte
+            del calendario periódico. Se registra como un evento único.
+        </div>
+
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="form_manual" value="1">
@@ -184,98 +358,34 @@
                 <div class="row g-4">
                     <div class="col-md-5">
                         <label class="form-label">Código del equipo *</label>
-                        <input list="listaEquipos" id="codigoEquipo" name="codigo_equipo"
+                        <input list="listaEquiposNP" id="codigoEquipoNP" name="codigo_equipo"
                                class="form-control" placeholder="Ej: EQ-0042"
                                autocomplete="off" required
                                value="{{ form_data.codigo_equipo|default:'' }}">
-                        <datalist id="listaEquipos">
+                        <datalist id="listaEquiposNP">
                             {% for e in equipos %}<option value="{{ e.codigo }}">{% endfor %}
                         </datalist>
-                        <div id="equipoBadge" class="equipo-info-badge">
-                            <div class="eq-nombre" id="equipoNombre">—</div>
+                        <div class="equipo-not-found" id="equipoNotFoundNP">
+                            ✗ Código no encontrado
+                        </div>
+                        <div class="equipo-info-badge" id="equipoBadgeNP">
+                            <div class="eq-nombre" id="equipoNombreNP">—</div>
                             <div class="eq-meta">
-                                <span id="equipoTipo">—</span>
-                                <span>·</span>
-                                <span id="equipoUbicacion">—</span>
+                                <span>Tipo: <strong id="equipoTipoNP">—</strong></span>
+                                <span>Ubicación: <strong id="equipoUbicacionNP">—</strong></span>
                             </div>
                         </div>
-                        <div id="equipoNotFound" class="equipo-not-found">
-                            ⚠ Equipo no encontrado en el sistema
-                        </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- TIPO Y MODALIDAD -->
-            <div class="form-section">
-                <div class="section-label">🔧 Tipo de intervención</div>
-                <div class="row g-4">
-                    <div class="col-md-4">
-                        <label class="form-label">Tipo de mantenimiento *</label>
-                        <select name="tipo" class="form-select" required
-                                onchange="animarOtro(this.value,'campoTipoOtro')">
-                            <option value="">Seleccionar...</option>
-                            {% for t in TIPO_CHOICES %}
-                            <option value="{{ t.0 }}" {% if form_data.tipo == t.0 %}selected{% endif %}>
-                                {{ t.1 }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Tipo de atención</label>
-                        <select name="tipo_atencion" class="form-select">
-                            {% for val, label in ATENCION_CHOICES %}
-                            <option value="{{ val }}" {% if form_data.tipo_atencion == val %}selected{% endif %}>
-                                {{ label }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <div class="col-md-4">
-                        <label class="form-label">Fecha *</label>
-                        <input type="date" name="fecha" class="form-control" required
-                               value="{{ form_data.fecha|default:'' }}">
-                    </div>
-
-                    <div class="col-md-4">
-                        <div id="campoTipoOtro" class="campo-otro {% if form_data.tipo == 'otro' %}visible{% endif %}">
-                            <label class="form-label">Especificar tipo</label>
-                            <input type="text" name="tipo_otro" class="form-control"
-                                   value="{{ form_data.tipo_otro|default:'' }}"
-                                   placeholder="Ej: Calibración, Limpieza...">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- DESCRIPCIÓN -->
-            <div class="form-section">
-                <div class="section-label">📋 Descripción técnica</div>
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <label class="form-label">Problema / Asunto</label>
-                        <textarea name="problema" class="form-control" rows="3"
-                                  placeholder="Describa el problema o asunto reportado...">{{ form_data.problema|default:'' }}</textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Solución aplicada</label>
-                        <textarea name="solucion" class="form-control" rows="3"
-                                  placeholder="Describa la solución o intervención realizada...">{{ form_data.solucion|default:'' }}</textarea>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RESPONSABLE -->
-            <div class="form-section">
-                <div class="section-label">👨‍🔧 Responsable y estado</div>
-                <div class="row g-4">
                     <div class="col-md-3">
-                        <label class="form-label">Técnico asignado *</label>
-                        <select name="tecnico" class="form-select" required>
-                            <option value="">Seleccionar...</option>
+                        <label class="form-label">Ciudad / Lugar</label>
+                        <input type="text" name="ciudad" class="form-control"
+                               placeholder="Ej: Guayaquil..."
+                               value="{{ form_data.ciudad|default:'' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Técnico asignado</label>
+                        <select name="tecnico" class="form-select">
+                            <option value="">Sin asignar</option>
                             {% for t in tecnicos %}
                             <option value="{{ t.id }}"
                                 {% if form_data.tecnico == t.id|stringformat:"s" %}selected{% endif %}>
@@ -284,79 +394,138 @@
                             {% endfor %}
                         </select>
                     </div>
+                </div>
+            </div>
+
+            <!-- DATOS DEL MANTENIMIENTO -->
+            <div class="form-section">
+                <div class="section-label">📋 Datos del mantenimiento</div>
+                <div class="row g-4">
+
+                    <div class="col-md-3">
+                        <label class="form-label">Tipo *</label>
+                        <select name="tipo" class="form-select" required
+                                onchange="animarOtro(this.value,'campoTipoOtroNP')">
+                            {% for val, label in TIPO_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_data.tipo == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="campo-otro {% if form_data.tipo == 'otro' %}visible{% endif %}"
+                             id="campoTipoOtroNP" style="margin-top:8px">
+                            <input type="text" name="tipo_otro" class="form-control"
+                                   placeholder="Especificar tipo..."
+                                   value="{{ form_data.tipo_otro|default:'' }}">
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Fecha *</label>
+                        <input type="date" name="fecha" class="form-control" required
+                               value="{{ form_data.fecha|default:'' }}">
+                    </div>
 
                     <div class="col-md-3">
                         <label class="form-label">Estado *</label>
-                        <select name="estado" class="form-select">
-                            <option value="pendiente"  {% if form_data.estado == 'pendiente'  %}selected{% endif %}>Pendiente</option>
+                        <select name="estado" class="form-select" required>
                             <option value="completado" {% if form_data.estado == 'completado' %}selected{% endif %}>Completado</option>
+                            <option value="pendiente"  {% if form_data.estado == 'pendiente'  %}selected{% endif %}>Pendiente</option>
+                            <option value="cancelado"  {% if form_data.estado == 'cancelado'  %}selected{% endif %}>Cancelado</option>
                         </select>
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Costo (USD)</label>
-                        <input type="number" step="0.01" min="0" name="costo"
-                               class="form-control" placeholder="0.00"
-                               value="{{ form_data.costo|default:'' }}">
+                        <label class="form-label">Tipo de atención</label>
+                        <select name="tipo_atencion" class="form-select">
+                            {% for val, label in ATENCION_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_data.tipo_atencion == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="col-md-3">
-                        <label class="form-label">Usos / mAs acumulados</label>
-                        <input type="number" min="0" name="usos_mas"
-                               class="form-control" placeholder="Ej: 125 000"
+                        <label class="form-label">Usos / mAs del equipo</label>
+                        <input type="number" name="usos_mas" class="form-control"
+                               min="0" placeholder="Ej: 125000"
                                value="{{ form_data.usos_mas|default:'' }}">
-                        <div class="form-text">Número de usos o mAs del equipo.</div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Código(s) de error</label>
+                        <input type="text" name="codigo_error" class="form-control"
+                               placeholder="Ej: E01, F-23 (opcional)"
+                               value="{{ form_data.codigo_error|default:'' }}"
+                               title="Separar múltiples códigos con coma">
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Problema / Asunto</label>
+                        <textarea name="problema" class="form-control" rows="2"
+                                  placeholder="Describa el problema o asunto reportado...">{{ form_data.problema|default:'' }}</textarea>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label">Solución aplicada</label>
+                        <textarea name="solucion" class="form-control" rows="2"
+                                  placeholder="Describa la solución o intervención realizada...">{{ form_data.solucion|default:'' }}</textarea>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Próximo mantenimiento -->
+            <div class="form-section">
+                <div class="section-label">📅 Próximo mantenimiento (opcional)</div>
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha del próximo</label>
+                        <input type="date" name="fecha_proximo" class="form-control"
+                               value="{{ form_data.fecha_proximo|default:'' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Periodicidad</label>
+                        <select name="etiqueta_proximo" class="form-select"
+                                onchange="animarOtro(this.value,'campoEtiquetaProxOtroNP')">
+                            <option value="">Sin etiqueta</option>
+                            {% for val, label in ETIQUETA_CHOICES %}
+                            <option value="{{ val }}"
+                                {% if form_data.etiqueta_proximo == val %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="campo-otro" id="campoEtiquetaProxOtroNP" style="margin-top:8px">
+                            <input type="text" name="etiqueta_proximo_otro" class="form-control"
+                                   placeholder="Ej: Bimestral, cada 45 días..."
+                                   value="{{ form_data.etiqueta_proximo_otro|default:'' }}">
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="d-flex align-items-center gap-3 mt-2 mb-4">
-                <button type="submit" class="btn-mant-submit">
-                    ➕ Registrar mantenimiento
-                </button>
-                <span class="text-muted" style="font-size:.82rem">* Campos obligatorios</span>
-            </div>
+            <button type="submit" class="btn-mant-submit">
+                ⚡ Registrar mantenimiento
+            </button>
         </form>
-    </div><!-- /panel-manual -->
+    </div><!-- /panel-noprogramado -->
 
 
-    <!-- ══════════════════════════════════════
-         PANEL EXCEL
-    ══════════════════════════════════════ -->
-    <div id="panel-excel" class="mant-panel {% if preview %}active{% endif %}">
-
+    <!-- ══════════════════════════════════════════════════
+         PANEL: EXCEL
+    ══════════════════════════════════════════════════ -->
+    <div id="panel-excel"
+         class="mant-panel {% if tab_activo == 'excel' or preview %}active{% endif %}">
         <div class="form-section">
             <div class="section-label">📊 Importar desde Excel</div>
-
-            <!-- Referencia de columnas -->
-            <div class="mb-4 p-3" style="background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">
-                <p style="font-size:.75rem;font-weight:700;text-transform:uppercase;
-                           letter-spacing:.08em;color:#94a3b8;margin-bottom:10px">
-                    Columnas esperadas en el archivo
-                </p>
-                <div class="col-chip-grid">
-                    <span class="col-chip ok">✓ codigo_equipo</span>
-                    <span class="col-chip ok">✓ fecha</span>
-                    <span class="col-chip ok">✓ tipo_mantenimiento</span>
-                    <span class="col-chip ok">✓ estado</span>
-                    <span class="col-chip ok">✓ costo</span>
-                    <span class="col-chip opt">○ tecnico</span>
-                    <span class="col-chip opt">○ descripcion</span>
-                </div>
-                <p class="mt-2 mb-0" style="font-size:.75rem;color:#94a3b8">
-                    <span class="col-chip ok" style="padding:2px 8px;font-size:.72rem">✓</span> = obligatoria &nbsp;
-                    <span class="col-chip opt" style="padding:2px 8px;font-size:.72rem">○</span> = opcional
-                </p>
-            </div>
-
-            <form method="post" enctype="multipart/form-data" id="formExcel">
+            <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
-
-                <label class="upload-zone {% if preview %}has-file{% endif %}"
-                       for="archivoExcel" id="uploadZone">
-                    <span class="upload-icon" id="uploadIcon">
-                        {% if preview %}✅{% else %}📂{% endif %}
-                    </span>
+                <label class="upload-zone" id="uploadZone" for="archivoExcel">
+                    <span class="upload-icon" id="uploadIcon">📂</span>
                     <div class="upload-label-text" id="uploadLabelText">
                         {% if preview %}
                             Archivo cargado — haz clic para reemplazarlo
@@ -369,7 +538,6 @@
                 <input type="file" name="archivo" id="archivoExcel"
                        class="d-none" accept=".xlsx,.xls" required
                        onchange="onFileChange(this)">
-
                 <div class="upload-actions">
                     <button type="submit" name="accion" value="preview"
                             class="btn btn-outline-secondary px-4"
@@ -377,51 +545,33 @@
                         👁 Previsualizar
                     </button>
                     <button type="submit" name="accion" value="guardar"
-                            class="btn-mant-submit"
-                            {% if not preview %}title="Previsualiza primero para verificar columnas"{% endif %}>
+                            class="btn-mant-submit">
                         ⬆️ Guardar en base de datos
                     </button>
                 </div>
             </form>
         </div>
 
-        <!-- ── PREVIEW ── -->
         {% if preview %}
         <div class="form-section">
             <div class="section-label">
-                👁 Previsualización — {{ preview|length }} fila{{ preview|length|pluralize }} mostrada{{ preview|length|pluralize }}
+                👁 Previsualización — {{ preview|length }} fila{{ preview|length|pluralize }}
             </div>
-
-            <!-- Chips con resultado real de la validación -->
             <div class="col-chip-grid mb-4" id="colChipsReal"></div>
-
             <div class="table-responsive">
                 <table class="table table-hover preview-table align-middle mb-0">
                     <thead>
-                        <tr>
-                            {% for col in columnas %}
-                            <th id="th-{{ forloop.counter0 }}">{{ col }}</th>
-                            {% endfor %}
-                        </tr>
+                        <tr>{% for col in columnas %}<th>{{ col }}</th>{% endfor %}</tr>
                     </thead>
                     <tbody>
                         {% for fila in preview %}
-                        <tr>
-                            {% for val in fila %}
-                            <td>{{ val|default:"—" }}</td>
-                            {% endfor %}
-                        </tr>
+                        <tr>{% for val in fila %}<td>{{ val|default:"—" }}</td>{% endfor %}</tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-
-            <p class="text-muted mt-3 mb-0" style="font-size:.82rem">
-                Solo se muestran las primeras filas. Al guardar se procesarán <strong>todas</strong>.
-            </p>
         </div>
         {% endif %}
-
     </div><!-- /panel-excel -->
 
 </div><!-- /mant-page -->
@@ -441,32 +591,31 @@ const equiposData = {
     {% endfor %}
 };
 
-/* ─── Autocomplete equipo ─── */
-const inputCodigo = document.getElementById('codigoEquipo');
-const badge       = document.getElementById('equipoBadge');
-const notFound    = document.getElementById('equipoNotFound');
-
-function checkEquipo(codigo) {
-    const info = equiposData[codigo.trim()];
-    if (info) {
-        document.getElementById('equipoNombre').textContent    = info.nombre;
-        document.getElementById('equipoTipo').textContent      = info.tipo;
-        document.getElementById('equipoUbicacion').textContent = info.ubicacion;
-        badge.classList.add('show');
-        notFound.classList.remove('show');
-    } else if (codigo.trim().length > 0) {
-        badge.classList.remove('show');
-        notFound.classList.add('show');
-    } else {
-        badge.classList.remove('show');
-        notFound.classList.remove('show');
+/* ─── Autocomplete genérico ─── */
+function bindEquipo(inputId, badgeId, notFoundId, nombreId, tipoId, ubicId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    function check(codigo) {
+        const info = equiposData[codigo.trim()];
+        if (info) {
+            document.getElementById(nombreId).textContent   = info.nombre;
+            document.getElementById(tipoId).textContent     = info.tipo;
+            document.getElementById(ubicId).textContent     = info.ubicacion;
+            document.getElementById(badgeId).classList.add('show');
+            document.getElementById(notFoundId).classList.remove('show');
+        } else if (codigo.trim().length > 0) {
+            document.getElementById(badgeId).classList.remove('show');
+            document.getElementById(notFoundId).classList.add('show');
+        } else {
+            document.getElementById(badgeId).classList.remove('show');
+            document.getElementById(notFoundId).classList.remove('show');
+        }
     }
+    input.addEventListener('input', e => check(e.target.value));
+    if (input.value) check(input.value);
 }
-
-if (inputCodigo) {
-    inputCodigo.addEventListener('input', e => checkEquipo(e.target.value));
-    if (inputCodigo.value) checkEquipo(inputCodigo.value);
-}
+bindEquipo('codigoEquipoProg','equipoBadgeProg','equipoNotFoundProg','equipoNombreProg','equipoTipoProg','equipoUbicacionProg');
+bindEquipo('codigoEquipoNP','equipoBadgeNP','equipoNotFoundNP','equipoNombreNP','equipoTipoNP','equipoUbicacionNP');
 
 /* ─── Campo "otro" animado ─── */
 function animarOtro(val, campoId) {
@@ -487,7 +636,75 @@ function switchTab(nombre, btn) {
     btn.classList.add('active');
 }
 
-/* ─── Feedback zona upload ─── */
+/* ─── Preview de fechas programadas ─── */
+const INTERVALOS = {
+    bimestral:     60,
+    trimestral:    90,
+    cuatrimestral: 120,
+    semestral:     180,
+    anual:         365,
+};
+
+function calcularFechas(inicio, etiqueta) {
+    const dias = INTERVALOS[etiqueta];
+    if (!dias || !inicio) return [];
+    const fechas = [];
+    let d = new Date(inicio + 'T00:00:00');
+    const fin = new Date(d);
+    fin.setFullYear(fin.getFullYear() + 1);
+    while (d <= fin) {
+        fechas.push(new Date(d));
+        d = new Date(d.getTime() + dias * 86400000);
+    }
+    return fechas;
+}
+
+function fmtDate(d) {
+    return d.toLocaleDateString('es-EC', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function actualizarPreviewProg() {
+    const etiqueta = document.getElementById('selectEtiquetaProg').value;
+    const fecha    = document.getElementById('fechaInicioProg').value;
+    const seccion  = document.getElementById('seccionPreviewProg');
+    const contenido = document.getElementById('previewProgContenido');
+
+    if (!etiqueta || !fecha) {
+        seccion.style.display = 'none';
+        return;
+    }
+
+    const fechas = calcularFechas(fecha, etiqueta);
+    seccion.style.display = 'block';
+
+    const etiquetaLabel = {
+        bimestral:'Bimestral', trimestral:'Trimestral',
+        cuatrimestral:'Cuatrimestral', semestral:'Semestral', anual:'Anual'
+    }[etiqueta] || etiqueta;
+
+    contenido.innerHTML = `
+        <p style="font-size:.85rem;color:#64748b;margin-bottom:12px">
+            Se crearán <strong>${fechas.length}</strong> mantenimiento(s) con periodicidad
+            <strong>${etiquetaLabel}</strong>:
+        </p>
+        <div class="table-responsive">
+        <table class="table table-sm prog-preview-table mb-0">
+            <thead><tr>
+                <th>#</th><th>Fecha</th><th>Estado inicial</th>
+            </tr></thead>
+            <tbody>
+                ${fechas.map((f, i) => `
+                    <tr>
+                        <td>${i+1}</td>
+                        <td>${fmtDate(f)}</td>
+                        <td><span class="badge bg-warning text-dark">Pendiente</span></td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>
+        </div>`;
+}
+
+/* ─── Upload feedback ─── */
 function onFileChange(input) {
     if (!input.files.length) return;
     const zone  = document.getElementById('uploadZone');
@@ -498,55 +715,28 @@ function onFileChange(input) {
     zone.classList.add('has-file');
 }
 
-/* ─── Validación visual de columnas tras preview ─── */
+/* ─── Validación columnas Excel ─── */
 {% if columnas %}
 (function () {
-    const REQUERIDAS = ['codigo_equipo','fecha','tipo_mantenimiento','estado','costo'];
-    const OPCIONALES  = ['tecnico','descripcion'];
-    const reales      = JSON.parse('{{ columnas|safe|default:"[]" }}');
-    const container   = document.getElementById('colChipsReal');
+    const REQUERIDAS = ['codigo_equipo','fecha','tipo_mantenimiento','estado'];
+    const reales     = JSON.parse('{{ columnas|safe|default:"[]" }}');
+    const container  = document.getElementById('colChipsReal');
     if (!container) return;
-
     container.innerHTML = '';
-
-    // Columnas presentes
     reales.forEach(col => {
         const chip = document.createElement('span');
-        if (REQUERIDAS.includes(col)) {
-            chip.className   = 'col-chip ok';
-            chip.textContent = '✓ ' + col;
-        } else {
-            chip.className   = 'col-chip extra';
-            chip.textContent = '+ ' + col;
-        }
+        chip.className   = REQUERIDAS.includes(col) ? 'col-chip ok' : 'col-chip extra';
+        chip.textContent = (REQUERIDAS.includes(col) ? '✓ ' : '+ ') + col;
         container.appendChild(chip);
     });
-
-    // Columnas requeridas faltantes
-    let hayFaltantes = false;
     REQUERIDAS.forEach(req => {
         if (!reales.includes(req)) {
-            hayFaltantes = true;
             const chip = document.createElement('span');
             chip.className   = 'col-chip miss';
             chip.textContent = '✗ ' + req + ' (falta)';
             container.appendChild(chip);
-
-            // Resaltar encabezado de tabla si existe
-            const ths = document.querySelectorAll('#tablaPreview thead th');
-            ths.forEach(th => {
-                if (th.textContent.trim() === req) th.style.background = '#fef2f2';
-            });
         }
     });
-
-    // Banner de error si faltan columnas obligatorias
-    if (hayFaltantes) {
-        const banner = document.createElement('div');
-        banner.className = 'mant-alert-err mt-3';
-        banner.innerHTML = '❌ El archivo no tiene todas las columnas obligatorias. Corrígelo antes de guardar.';
-        container.parentNode.insertBefore(banner, container.nextSibling);
-    }
 })();
 {% endif %}
 </script>

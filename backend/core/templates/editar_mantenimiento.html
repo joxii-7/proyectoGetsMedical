@@ -79,13 +79,6 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label fw-bold">Costo ($)</label>
-                    <input type="number" step="0.01" name="costo"
-                           class="form-control" value="{{ m.costo }}">
-                </div>
-
-                <!-- Etiqueta de este mantenimiento -->
-                <div class="col-md-4">
                     <label class="form-label fw-bold">Etiqueta de periodicidad</label>
                     <select name="etiqueta" class="form-select" id="selectEtiqueta"
                             onchange="toggleOtro('etiqueta', 'campoEtiquetaOtro')">
@@ -139,6 +132,15 @@
                            value="{{ m.equipo.usos_mas|default:'' }}"
                            placeholder="Ej: 125000">
                     <div class="form-text">Número de usos o mAs acumulados.</div>
+                </div>
+
+                <!-- Código(s) de error -->
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Código(s) de error</label>
+                    <input type="text" name="codigo_error" class="form-control"
+                           value="{{ m.codigo_error|default:'' }}"
+                           placeholder="Ej: E01, F-23, 0x8A (separados por coma)">
+                    <div class="form-text">Opcional. El sistema también detecta códigos mencionados en problema/solución.</div>
                 </div>
 
             </div>

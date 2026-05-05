@@ -12,4 +12,27 @@ urlpatterns = [
     path('subir-mantenimientos/',                   views.subir_mantenimientos,  name='subir_mantenimientos'),
     path('alertas/',                                views.alertas,               name='alertas'),
     path('dashboard/',                              views.dashboard,             name='dashboard'),
+
+    # ── Subtareas ──────────────────────────────────────────
+    path('mantenimiento/<int:mantenimiento_id>/subtareas/',
+         views.subtareas_mantenimiento,
+         name='subtareas_mantenimiento'),
+    path('subtarea/<int:ejecucion_id>/toggle/',
+         views.toggle_subtarea,
+         name='toggle_subtarea'),
+    path('subtarea/<int:ejecucion_id>/nota/',
+         views.nota_subtarea,
+         name='nota_subtarea'),
+
+    # ── PDF de mantenimiento individual ────────────────────
+    path('mantenimiento/<int:mantenimiento_id>/pdf/',
+         views.pdf_mantenimiento,
+         name='pdf_mantenimiento'),
+
+    # ── PDF Cronograma de mantenimientos programados ────────
+    path('equipo/<int:equipo_id>/cronograma/pdf/',
+         views.pdf_cronograma,
+         name='pdf_cronograma'),
+
+     path('calendario/', views.calendario, name='calendario')
 ]

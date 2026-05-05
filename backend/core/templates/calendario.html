@@ -1,0 +1,690 @@
+{% extends 'base.html' %}
+{% block title %}Calendario de Mantenimientos{% endblock %}
+
+{% block content %}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap');
+
+    .cal-page * { font-family: 'Sora', 'Segoe UI', sans-serif; }
+
+    /* ── CABECERA ─────────────────────────────────────────── */
+    .cal-header {
+        display: flex; align-items: flex-end; justify-content: space-between;
+        margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+    }
+    .cal-title-block h2 {
+        font-size: 1.6rem; font-weight: 700; color: #0f172a;
+        margin: 0; letter-spacing: -0.03em;
+    }
+    .cal-title-block p {
+        font-size: .82rem; color: #94a3b8; margin: 4px 0 0;
+    }
+
+    /* ── LEYENDA ──────────────────────────────────────────── */
+    .cal-legend {
+        display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    }
+    .leg-item {
+        display: flex; align-items: center; gap: 5px;
+        font-size: .76rem; color: #475569; font-weight: 500;
+    }
+    .leg-dot {
+        width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0;
+    }
+
+    /* ── CONTROLES DE NAVEGACIÓN ─────────────────────────── */
+    .cal-nav {
+        display: flex; align-items: center; gap: 0;
+        background: #f1f5f9; border-radius: 12px; overflow: hidden;
+    }
+    .cal-nav button {
+        border: none; background: transparent; padding: 8px 14px;
+        font-size: .95rem; cursor: pointer; color: #475569;
+        transition: background .15s, color .15s;
+    }
+    .cal-nav button:hover { background: #e2e8f0; color: #0f172a; }
+    .cal-nav .cal-month-label {
+        font-family: 'DM Mono', monospace; font-size: .9rem;
+        font-weight: 500; color: #1e293b; min-width: 160px; text-align: center;
+        padding: 8px 0; pointer-events: none;
+    }
+
+    /* ── FILTROS RÁPIDOS ─────────────────────────────────── */
+    .cal-filters {
+        display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
+        align-items: center;
+    }
+    .cal-filter-btn {
+        border: 1.5px solid #e2e8f0; border-radius: 8px;
+        background: #fff; padding: 4px 12px; font-size: .78rem; font-weight: 500;
+        color: #64748b; cursor: pointer; transition: all .15s;
+    }
+    .cal-filter-btn.active, .cal-filter-btn:hover {
+        background: #0f172a; color: #fff; border-color: #0f172a;
+    }
+    .cal-filter-btn.f-completado.active  { background: #059669; border-color: #059669; }
+    .cal-filter-btn.f-pendiente.active   { background: #d97706; border-color: #d97706; }
+    .cal-filter-btn.f-proximo.active     { background: #0ea5e9; border-color: #0ea5e9; }
+    .cal-filter-btn.f-cancelado.active   { background: #dc2626; border-color: #dc2626; }
+    .cal-filter-btn.f-programado.active  { background: #6366f1; border-color: #6366f1; }
+
+    /* ── GRID CALENDARIO ─────────────────────────────────── */
+    .cal-grid-wrap {
+        background: #fff; border-radius: 20px;
+        box-shadow: 0 4px 24px rgba(15,23,42,.07);
+        overflow: hidden;
+    }
+
+    .cal-weekdays {
+        display: grid; grid-template-columns: repeat(7, 1fr);
+        background: #0f172a;
+    }
+    .cal-weekday {
+        text-align: center; padding: 12px 4px;
+        font-family: 'DM Mono', monospace; font-size: .72rem;
+        font-weight: 500; color: #94a3b8; letter-spacing: .06em;
+        text-transform: uppercase;
+    }
+    .cal-weekday:first-child { color: #f87171; }   /* Dom */
+    .cal-weekday:last-child  { color: #60a5fa; }   /* Sáb */
+
+    .cal-days {
+        display: grid; grid-template-columns: repeat(7, 1fr);
+        border-left: 1px solid #f1f5f9; border-top: 1px solid #f1f5f9;
+    }
+    .cal-cell {
+        min-height: 110px; border-right: 1px solid #f1f5f9;
+        border-bottom: 1px solid #f1f5f9; padding: 8px 6px 6px;
+        position: relative; transition: background .15s;
+    }
+    .cal-cell:hover { background: #fafbfc; }
+    .cal-cell.other-month { background: #fafafa; }
+    .cal-cell.other-month .cal-day-num { color: #d1d5db; }
+    .cal-cell.today {
+        background: linear-gradient(135deg, #f0fdf9 0%, #ecfdf5 100%);
+    }
+    .cal-cell.today .cal-day-num {
+        background: #2cb681; color: #fff; border-radius: 50%;
+        width: 24px; height: 24px; display: flex; align-items: center;
+        justify-content: center; font-weight: 700;
+    }
+    .cal-cell.sunday  .cal-day-num { color: #fca5a5; }
+    .cal-cell.saturday .cal-day-num { color: #93c5fd; }
+
+    .cal-day-num {
+        font-family: 'DM Mono', monospace; font-size: .78rem;
+        font-weight: 500; color: #94a3b8; margin-bottom: 5px;
+        width: 24px; height: 24px; display: flex; align-items: center;
+        justify-content: center;
+    }
+
+    /* ── EVENTOS EN CELDAS ───────────────────────────────── */
+    .cal-event {
+        display: flex; align-items: center; gap: 4px;
+        padding: 2px 6px; border-radius: 5px; margin-bottom: 2px;
+        font-size: .68rem; font-weight: 600; cursor: pointer;
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        max-width: 100%; transition: opacity .15s, transform .1s;
+        border-left: 3px solid transparent;
+    }
+    .cal-event:hover { opacity: .85; transform: translateX(1px); }
+
+    .ev-completado  { background: #dcfce7; color: #166534; border-left-color: #16a34a; }
+    .ev-pendiente   { background: #fef3c7; color: #92400e; border-left-color: #d97706; }
+    .ev-proximo     { background: #e0f2fe; color: #075985; border-left-color: #0284c7; }
+    .ev-cancelado   { background: #fee2e2; color: #991b1b; border-left-color: #dc2626; }
+    .ev-programado  { background: #ede9fe; color: #4c1d95; border-left-color: #7c3aed; }
+
+    .cal-more {
+        font-size: .65rem; color: #94a3b8; font-weight: 600;
+        padding: 1px 4px; cursor: pointer;
+        font-family: 'DM Mono', monospace;
+    }
+    .cal-more:hover { color: #475569; }
+
+    /* ── VISTA SEMANAL / MENSUAL TOGGLE ──────────────────── */
+    .view-toggle {
+        display: flex; background: #f1f5f9; border-radius: 9px;
+        padding: 3px; gap: 2px;
+    }
+    .view-btn {
+        padding: 5px 14px; border-radius: 7px; border: none; background: transparent;
+        font-size: .78rem; font-weight: 500; color: #64748b; cursor: pointer;
+        transition: all .15s;
+    }
+    .view-btn.active { background: #fff; color: #0f172a; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
+    /* ── PANEL LATERAL DE DETALLE DEL DÍA ───────────────── */
+    .day-panel {
+        position: fixed; right: -380px; top: 0;
+        width: 360px; height: 100vh;
+        background: #fff; border-left: 1px solid #f1f5f9;
+        box-shadow: -8px 0 40px rgba(15,23,42,.1);
+        z-index: 1060; transition: right .3s cubic-bezier(.4,0,.2,1);
+        display: flex; flex-direction: column; overflow: hidden;
+    }
+    .day-panel.open { right: 0; }
+    .day-panel-overlay {
+        position: fixed; inset: 0; background: rgba(15,23,42,.2);
+        z-index: 1059; display: none;
+        backdrop-filter: blur(2px);
+    }
+    .day-panel-overlay.open { display: block; }
+
+    .dp-header {
+        padding: 22px 22px 16px;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        flex-shrink: 0;
+    }
+    .dp-header .dp-date {
+        font-family: 'DM Mono', monospace; font-size: 2rem; font-weight: 500;
+        color: #fff; line-height: 1;
+    }
+    .dp-header .dp-weekday {
+        font-size: .8rem; color: #94a3b8; margin-top: 3px;
+    }
+    .dp-header .dp-close {
+        position: absolute; top: 18px; right: 18px;
+        background: rgba(255,255,255,.1); border: none; color: #fff;
+        width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+        font-size: .85rem; display: flex; align-items: center; justify-content: center;
+        transition: background .15s;
+    }
+    .dp-header .dp-close:hover { background: rgba(255,255,255,.2); }
+
+    .dp-body { flex: 1; overflow-y: auto; padding: 16px; }
+    .dp-body::-webkit-scrollbar { width: 4px; }
+    .dp-body::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+
+    .dp-event-card {
+        border-radius: 12px; padding: 14px; margin-bottom: 10px;
+        border: 1px solid #f1f5f9; transition: box-shadow .15s;
+    }
+    .dp-event-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,.08); }
+    .dp-event-card .dp-eq { font-size: .78rem; color: #94a3b8; margin-bottom: 4px; }
+    .dp-event-card .dp-tipo { font-weight: 700; color: #0f172a; font-size: .9rem; }
+    .dp-event-card .dp-tec { font-size: .78rem; color: #64748b; margin-top: 4px; }
+    .dp-event-card .dp-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 20px;
+        font-size: .68rem; font-weight: 700; margin-top: 6px;
+    }
+    .dp-empty {
+        text-align: center; color: #94a3b8; padding: 40px 20px;
+        font-size: .85rem;
+    }
+    .dp-empty .dp-empty-icon { font-size: 2rem; margin-bottom: 8px; }
+
+    /* ── MINI STATS ──────────────────────────────────────── */
+    .cal-stats {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 12px; margin-bottom: 20px;
+    }
+    .cal-stat {
+        background: #fff; border-radius: 14px; padding: 14px 16px;
+        box-shadow: 0 2px 12px rgba(15,23,42,.05); border: 1px solid #f1f5f9;
+    }
+    .cal-stat .cs-num {
+        font-family: 'DM Mono', monospace; font-size: 1.6rem;
+        font-weight: 500; line-height: 1; margin-bottom: 3px;
+    }
+    .cal-stat .cs-label { font-size: .72rem; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+    .cs-completado { color: #059669; }
+    .cs-pendiente  { color: #d97706; }
+    .cs-proximo    { color: #0284c7; }
+    .cs-programado { color: #7c3aed; }
+
+    /* ── VISTA AGENDA (lista) ────────────────────────────── */
+    .agenda-group { margin-bottom: 24px; }
+    .agenda-date-header {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 10px;
+    }
+    .agenda-date-num {
+        font-family: 'DM Mono', monospace; font-size: 1.4rem;
+        font-weight: 500; color: #0f172a; min-width: 36px;
+    }
+    .agenda-date-rest { font-size: .8rem; color: #94a3b8; }
+    .agenda-date-rest .wd { font-weight: 600; color: #64748b; text-transform: capitalize; }
+    .agenda-item {
+        background: #fff; border-radius: 12px; padding: 12px 16px;
+        margin-bottom: 6px; border: 1px solid #f1f5f9;
+        display: flex; gap: 12px; align-items: flex-start;
+        transition: box-shadow .15s; cursor: pointer;
+    }
+    .agenda-item:hover { box-shadow: 0 3px 14px rgba(15,23,42,.08); }
+    .agenda-item .ai-bar {
+        width: 4px; border-radius: 4px; flex-shrink: 0; align-self: stretch; min-height: 40px;
+    }
+    .agenda-item .ai-body { flex: 1; }
+    .agenda-item .ai-equipo { font-size: .75rem; color: #94a3b8; margin-bottom: 2px; }
+    .agenda-item .ai-tipo   { font-weight: 600; color: #0f172a; font-size: .88rem; }
+    .agenda-item .ai-meta   { font-size: .74rem; color: #64748b; margin-top: 3px; }
+    .agenda-today-line { height: 2px; background: #2cb681; border-radius: 2px; margin: 10px 0; position: relative; }
+    .agenda-today-line::before { content: 'HOY'; position: absolute; left: 0; top: -8px; font-size: .6rem; font-weight: 700; color: #2cb681; background: #f0fdf9; padding: 0 4px; font-family: 'DM Mono', monospace; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .cal-stats { grid-template-columns: repeat(2, 1fr); }
+        .cal-cell  { min-height: 70px; }
+        .day-panel { width: 100vw; }
+    }
+</style>
+
+<!-- DAY PANEL OVERLAY -->
+<a href="/dashboard/" class="btn btn-secondary mb-4">← Volver al dashboard</a>
+<div class="day-panel-overlay" id="dpOverlay" onclick="closeDayPanel()"></div>
+
+<!-- DAY PANEL -->
+<div class="day-panel" id="dayPanel">
+    <div class="dp-header" style="position:relative">
+        <div class="dp-date" id="dpDate">—</div>
+        <div class="dp-weekday" id="dpWeekday">—</div>
+        <button class="dp-close" onclick="closeDayPanel()">✕</button>
+    </div>
+    <div class="dp-body" id="dpBody"></div>
+</div>
+
+<!-- ═══════════════ CONTENIDO PRINCIPAL ═══════════════ -->
+<div class="cal-page">
+
+    <!-- CABECERA -->
+    <div class="cal-header">
+        <div class="cal-title-block">
+            <h2>Calendario de Mantenimientos</h2>
+            <p id="calSubtitle">Cargando...</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+            <div class="view-toggle">
+                <button class="view-btn active" id="btnMes"   onclick="setView('mes')">Mes</button>
+                <button class="view-btn"         id="btnAgenda" onclick="setView('agenda')">Agenda</button>
+            </div>
+            <div class="cal-nav">
+                <button onclick="navMes(-1)">‹</button>
+                <div class="cal-month-label" id="calMonthLabel">—</div>
+                <button onclick="navMes(1)">›</button>
+            </div>
+            <button class="cal-filter-btn active" onclick="goToday()"
+                    style="background:#0f172a;color:#fff;border-color:#0f172a">
+                Hoy
+            </button>
+        </div>
+    </div>
+
+    <!-- STATS DEL MES -->
+    <div class="cal-stats" id="calStats">
+        <div class="cal-stat">
+            <div class="cs-num cs-completado" id="statComp">—</div>
+            <div class="cs-label">Completados</div>
+        </div>
+        <div class="cal-stat">
+            <div class="cs-num cs-pendiente" id="statPend">—</div>
+            <div class="cs-label">Pendientes</div>
+        </div>
+        <div class="cal-stat">
+            <div class="cs-num cs-proximo" id="statProx">—</div>
+            <div class="cs-label">Próximos</div>
+        </div>
+        <div class="cal-stat">
+            <div class="cs-num cs-programado" id="statProg">—</div>
+            <div class="cs-label">Programados</div>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="cal-filters">
+        <span style="font-size:.75rem;color:#94a3b8;font-weight:600;margin-right:4px">FILTRAR:</span>
+        <button class="cal-filter-btn active"       id="fTodos"      onclick="setFiltro('todos')">Todos</button>
+        <button class="cal-filter-btn f-completado" id="fCompletado" onclick="setFiltro('completado')">✓ Completados</button>
+        <button class="cal-filter-btn f-pendiente"  id="fPendiente"  onclick="setFiltro('pendiente')">⏳ Pendientes</button>
+        <button class="cal-filter-btn f-proximo"    id="fProximo"    onclick="setFiltro('proximo')">📅 Próximos</button>
+        <button class="cal-filter-btn f-cancelado"  id="fCancelado"  onclick="setFiltro('cancelado')">✕ Cancelados</button>
+        <button class="cal-filter-btn f-programado" id="fProgramado" onclick="setFiltro('programado')">🔄 Programados</button>
+    </div>
+
+    <!-- LEYENDA -->
+    <div class="cal-legend" style="margin-bottom:16px">
+        <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Completado</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>Pendiente</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#0284c7"></div>Próximo</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#dc2626"></div>Cancelado</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>Programado (serie)</div>
+    </div>
+
+    <!-- VISTA MES -->
+    <div id="viewMes">
+        <div class="cal-grid-wrap">
+            <div class="cal-weekdays">
+                <div class="cal-weekday">Dom</div>
+                <div class="cal-weekday">Lun</div>
+                <div class="cal-weekday">Mar</div>
+                <div class="cal-weekday">Mié</div>
+                <div class="cal-weekday">Jue</div>
+                <div class="cal-weekday">Vie</div>
+                <div class="cal-weekday">Sáb</div>
+            </div>
+            <div class="cal-days" id="calDays"></div>
+        </div>
+    </div>
+
+    <!-- VISTA AGENDA -->
+    <div id="viewAgenda" style="display:none">
+        <div id="agendaBody" style="max-width:780px"></div>
+    </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  DATOS DESDE DJANGO
+// ══════════════════════════════════════════════════════════════
+const MANTENIMIENTOS_RAW = [
+    {% for m in todos_mantenimientos %}
+    {
+        id:         {{ m.id }},
+        fecha:      "{{ m.fecha|date:'Y-m-d' }}",
+        equipo:     "{{ m.equipo.nombre|escapejs }}",
+        equipo_id:  {{ m.equipo.id }},
+        codigo:     "{{ m.equipo.codigo|escapejs }}",
+        tipo:       "{{ m.tipo_display|escapejs }}",
+        estado:     "{{ m.estado|lower }}",
+        tecnico:    "{{ m.tecnico|default:'—'|escapejs }}",
+        programado: {{ m.programado|yesno:"true,false" }},
+        etiqueta:   "{{ m.etiqueta_display|escapejs }}",
+    },
+    {% endfor %}
+];
+
+// ══════════════════════════════════════════════════════════════
+//  ESTADO
+// ══════════════════════════════════════════════════════════════
+const hoy     = new Date();
+let curYear   = hoy.getFullYear();
+let curMonth  = hoy.getMonth();   // 0-indexed
+let filtro    = 'todos';
+let vistaAct  = 'mes';
+
+const MESES   = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                 'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DIAS    = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+
+// ══════════════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════════════
+function esHoy(y, m, d) {
+    return y === hoy.getFullYear() && m === hoy.getMonth() && d === hoy.getDate();
+}
+
+function estadoClass(m) {
+    if (m.programado && m.estado === 'pendiente') return 'ev-programado';
+    const mapa = { completado:'ev-completado', pendiente:'ev-pendiente',
+                   proximo:'ev-proximo', cancelado:'ev-cancelado' };
+    return mapa[m.estado] || 'ev-pendiente';
+}
+
+function estadoBadgeStyle(estado) {
+    const mapa = {
+        completado: 'background:#dcfce7;color:#166534',
+        pendiente:  'background:#fef3c7;color:#92400e',
+        proximo:    'background:#e0f2fe;color:#075985',
+        cancelado:  'background:#fee2e2;color:#991b1b',
+    };
+    return mapa[estado] || 'background:#f1f5f9;color:#475569';
+}
+
+function estadoBarColor(m) {
+    if (m.programado && m.estado === 'pendiente') return '#7c3aed';
+    const mapa = { completado:'#16a34a', pendiente:'#d97706',
+                   proximo:'#0284c7', cancelado:'#dc2626' };
+    return mapa[m.estado] || '#94a3b8';
+}
+
+function getMantByFecha(y, m, d) {
+    const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    return MANTENIMIENTOS_RAW.filter(x => x.fecha === iso && matchFiltro(x));
+}
+
+function getMantByMes(y, m) {
+    const prefix = `${y}-${String(m+1).padStart(2,'0')}-`;
+    return MANTENIMIENTOS_RAW.filter(x => x.fecha.startsWith(prefix) && matchFiltro(x));
+}
+
+function matchFiltro(m) {
+    if (filtro === 'todos') return true;
+    if (filtro === 'programado') return m.programado;
+    return m.estado === filtro;
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER CALENDARIO MES
+// ══════════════════════════════════════════════════════════════
+function renderMes() {
+    const label = `${MESES[curMonth]} ${curYear}`;
+    document.getElementById('calMonthLabel').textContent = label;
+    document.getElementById('calSubtitle').textContent =
+        `${label} · ${getMantByMes(curYear, curMonth).length} mantenimiento(s)`;
+
+    // Stats
+    const mants = getMantByMes(curYear, curMonth);
+    document.getElementById('statComp').textContent = mants.filter(m => m.estado === 'completado').length;
+    document.getElementById('statPend').textContent = mants.filter(m => m.estado === 'pendiente').length;
+    document.getElementById('statProx').textContent = mants.filter(m => m.estado === 'proximo').length;
+    document.getElementById('statProg').textContent = mants.filter(m => m.programado).length;
+
+    const grid = document.getElementById('calDays');
+    grid.innerHTML = '';
+
+    const primerDia = new Date(curYear, curMonth, 1).getDay(); // 0=dom
+    const diasEnMes = new Date(curYear, curMonth + 1, 0).getDate();
+    const diasAntes = primerDia;
+    const totalCeldas = Math.ceil((diasAntes + diasEnMes) / 7) * 7;
+
+    for (let i = 0; i < totalCeldas; i++) {
+        const dayOffset = i - diasAntes + 1;
+        let y = curYear, m = curMonth, d = dayOffset;
+
+        let extraClass = '';
+        if (dayOffset < 1) {
+            // Mes anterior
+            const fechaAnterior = new Date(curYear, curMonth, dayOffset);
+            y = fechaAnterior.getFullYear(); m = fechaAnterior.getMonth(); d = fechaAnterior.getDate();
+            extraClass = 'other-month';
+        } else if (dayOffset > diasEnMes) {
+            // Mes siguiente
+            const fechaSiguiente = new Date(curYear, curMonth, dayOffset);
+            y = fechaSiguiente.getFullYear(); m = fechaSiguiente.getMonth(); d = fechaSiguiente.getDate();
+            extraClass = 'other-month';
+        }
+
+        const diaSemana = (i % 7);
+        if (diaSemana === 0) extraClass += ' sunday';
+        if (diaSemana === 6) extraClass += ' saturday';
+        if (esHoy(y, m, d)) extraClass += ' today';
+
+        const mants = getMantByFecha(y, m, d);
+        const MAX_SHOW = 3;
+
+        let eventsHTML = mants.slice(0, MAX_SHOW).map(mt => `
+            <div class="cal-event ${estadoClass(mt)}"
+                 onclick="event.stopPropagation(); openDayPanel('${y}','${m}','${d}')"
+                 title="${mt.equipo} · ${mt.tipo}">
+                <span style="overflow:hidden;text-overflow:ellipsis">${mt.equipo}</span>
+            </div>
+        `).join('');
+
+        if (mants.length > MAX_SHOW) {
+            eventsHTML += `<div class="cal-more" onclick="event.stopPropagation(); openDayPanel('${y}','${m}','${d}')">+${mants.length - MAX_SHOW} más</div>`;
+        }
+
+        const cell = document.createElement('div');
+        cell.className = `cal-cell ${extraClass}`;
+        cell.innerHTML = `<div class="cal-day-num">${d}</div>${eventsHTML}`;
+        cell.addEventListener('click', () => openDayPanel(y, m, d));
+        grid.appendChild(cell);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  RENDER AGENDA
+// ══════════════════════════════════════════════════════════════
+function renderAgenda() {
+    const label = `${MESES[curMonth]} ${curYear}`;
+    document.getElementById('calMonthLabel').textContent = label;
+    document.getElementById('calSubtitle').textContent =
+        `Agenda de ${label}`;
+
+    const mants = getMantByMes(curYear, curMonth);
+    const body  = document.getElementById('agendaBody');
+
+    // Agrupar por día
+    const porDia = {};
+    mants.forEach(m => {
+        porDia[m.fecha] = porDia[m.fecha] || [];
+        porDia[m.fecha].push(m);
+    });
+
+    const fechas = Object.keys(porDia).sort();
+
+    if (!fechas.length) {
+        body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:#94a3b8;font-size:.9rem">
+            Sin mantenimientos en ${MESES[curMonth]} ${curYear}</div>`;
+        return;
+    }
+
+    const todayISO = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+
+    body.innerHTML = fechas.map((fecha, idx) => {
+        const partes = fecha.split('-');
+        const fDate  = new Date(parseInt(partes[0]), parseInt(partes[1])-1, parseInt(partes[2]));
+        const dia    = fDate.getDate();
+        const wd     = DIAS[fDate.getDay()];
+
+        const esHoyLinea = fecha === todayISO;
+        const anteriorFecha = idx > 0 ? fechas[idx - 1] : null;
+        const lineaHoy = (anteriorFecha && anteriorFecha < todayISO && fecha >= todayISO && !esHoyLinea)
+            ? '<div class="agenda-today-line"></div>' : '';
+
+        const items = porDia[fecha].map(m => `
+            <div class="agenda-item" onclick="openDayPanel('${partes[0]}','${parseInt(partes[1])-1}','${dia}')">
+                <div class="ai-bar" style="background:${estadoBarColor(m)}"></div>
+                <div class="ai-body">
+                    <div class="ai-equipo">${m.codigo} · ${m.equipo}</div>
+                    <div class="ai-tipo">${m.tipo}</div>
+                    <div class="ai-meta">
+                        ${m.tecnico !== '—' ? `👤 ${m.tecnico} &nbsp;·&nbsp;` : ''}
+                        <span style="background:${estadoBadgeStyle(m.estado).split(';')[0].split(':')[1]};color:${estadoBadgeStyle(m.estado).split(';')[1].split(':')[1]};padding:1px 6px;border-radius:6px;font-size:.68rem;font-weight:700">${m.estado}</span>
+                        ${m.programado ? '&nbsp;🔄' : ''}
+                    </div>
+                </div>
+                <div style="font-size:.75rem;color:#94a3b8;font-family:'DM Mono',monospace;margin-top:2px">${String(dia).padStart(2,'0')}</div>
+            </div>
+        `).join('');
+
+        return `${lineaHoy}
+        <div class="agenda-group">
+            <div class="agenda-date-header">
+                <div class="agenda-date-num">${String(dia).padStart(2,'0')}</div>
+                <div class="agenda-date-rest">
+                    <span class="wd">${wd}</span>
+                    ${esHoyLinea ? ' <span style="background:#2cb681;color:#fff;padding:1px 7px;border-radius:6px;font-size:.65rem;font-weight:700">HOY</span>' : ''}
+                </div>
+            </div>
+            ${items}
+        </div>`;
+    }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+//  PANEL LATERAL DÍA
+// ══════════════════════════════════════════════════════════════
+function openDayPanel(y, m, d) {
+    const fecha  = new Date(parseInt(y), parseInt(m), parseInt(d));
+    const mants  = getMantByFecha(parseInt(y), parseInt(m), parseInt(d));
+
+    document.getElementById('dpDate').textContent    = `${String(d).padStart(2,'0')} ${MESES[parseInt(m)].substring(0,3).toUpperCase()} ${y}`;
+    document.getElementById('dpWeekday').textContent = DIAS[fecha.getDay()];
+
+    const body = document.getElementById('dpBody');
+
+    if (!mants.length) {
+        body.innerHTML = `<div class="dp-empty">
+            <div class="dp-empty-icon">📭</div>
+            Sin mantenimientos este día.
+        </div>`;
+    } else {
+        body.innerHTML = mants.map(mt => {
+            const barColor = estadoBarColor(mt);
+            return `
+            <div class="dp-event-card" style="border-left:4px solid ${barColor}">
+                <div class="dp-eq">${mt.codigo}</div>
+                <div class="dp-tipo">${mt.equipo}</div>
+                <div style="font-size:.8rem;color:#475569;margin-top:2px">${mt.tipo}</div>
+                <div class="dp-tec">👤 ${mt.tecnico}</div>
+                ${mt.programado ? '<div style="font-size:.72rem;color:#7c3aed;margin-top:2px">🔄 Mantenimiento de serie</div>' : ''}
+                ${mt.etiqueta && mt.etiqueta !== '—' ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:2px">⟳ ${mt.etiqueta}</div>` : ''}
+                <div>
+                    <span class="dp-badge" style="${estadoBadgeStyle(mt.estado)}">${mt.estado}</span>
+                </div>
+                <a href="/mantenimiento/${mt.id}/editar/"
+                   style="display:inline-block;margin-top:10px;font-size:.75rem;color:#2563eb;text-decoration:none;font-weight:600">
+                    ✏️ Editar mantenimiento →
+                </a>
+            </div>`;
+        }).join('');
+    }
+
+    document.getElementById('dayPanel').classList.add('open');
+    document.getElementById('dpOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeDayPanel() {
+    document.getElementById('dayPanel').classList.remove('open');
+    document.getElementById('dpOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDayPanel(); });
+
+// ══════════════════════════════════════════════════════════════
+//  CONTROLES
+// ══════════════════════════════════════════════════════════════
+function navMes(dir) {
+    curMonth += dir;
+    if (curMonth > 11) { curMonth = 0;  curYear++; }
+    if (curMonth < 0)  { curMonth = 11; curYear--; }
+    render();
+}
+
+function goToday() {
+    curYear  = hoy.getFullYear();
+    curMonth = hoy.getMonth();
+    render();
+}
+
+function setFiltro(f) {
+    filtro = f;
+    document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
+    const id = { todos:'fTodos', completado:'fCompletado', pendiente:'fPendiente',
+                 proximo:'fProximo', cancelado:'fCancelado', programado:'fProgramado' };
+    document.getElementById(id[f])?.classList.add('active');
+    render();
+}
+
+function setView(v) {
+    vistaAct = v;
+    document.getElementById('viewMes').style.display    = v === 'mes'    ? 'block' : 'none';
+    document.getElementById('viewAgenda').style.display = v === 'agenda' ? 'block' : 'none';
+    document.getElementById('btnMes').classList.toggle('active',    v === 'mes');
+    document.getElementById('btnAgenda').classList.toggle('active', v === 'agenda');
+    render();
+}
+
+function render() {
+    if (vistaAct === 'mes')    renderMes();
+    if (vistaAct === 'agenda') renderAgenda();
+}
+
+// Init
+render();
+</script>
+{% endblock %}

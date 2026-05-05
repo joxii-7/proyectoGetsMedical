@@ -2,6 +2,238 @@
 {% block title %}{{ equipo.nombre }}{% endblock %}
 
 {% block content %}
+
+<style>
+    /* ── DRAWER DE SUBTAREAS ─────────────────────────────── */
+    .subtarea-drawer {
+        position: fixed;
+        top: 0; right: -440px;
+        width: 420px;
+        height: 100vh;
+        background: #fff;
+        box-shadow: -6px 0 32px rgba(0,0,0,.12);
+        z-index: 1050;
+        display: flex;
+        flex-direction: column;
+        transition: right .3s cubic-bezier(.4,0,.2,1);
+        border-radius: 20px 0 0 20px;
+    }
+    .subtarea-drawer.open { right: 0; }
+
+    .drawer-overlay {
+        position: fixed; inset: 0;
+        background: rgba(15,23,42,.25);
+        backdrop-filter: blur(2px);
+        z-index: 1049;
+        display: none;
+        animation: fadeIn .2s ease;
+    }
+    .drawer-overlay.open { display: block; }
+
+    .drawer-header {
+        padding: 20px 22px 16px;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex; align-items: flex-start; justify-content: space-between;
+        flex-shrink: 0;
+    }
+    .drawer-header h5 {
+        font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0 0 2px;
+    }
+    .drawer-header .sub {
+        font-size: .78rem; color: #94a3b8;
+    }
+    .drawer-close {
+        background: none; border: none; font-size: 1.2rem; color: #94a3b8;
+        cursor: pointer; padding: 2px 6px; border-radius: 6px;
+        transition: background .15s;
+    }
+    .drawer-close:hover { background: #f1f5f9; color: #374151; }
+
+    /* Barra de progreso */
+    .drawer-progress {
+        padding: 12px 22px;
+        border-bottom: 1px solid #f1f5f9;
+        flex-shrink: 0;
+    }
+    .progress-bar-wrap {
+        height: 6px; background: #f1f5f9; border-radius: 4px; overflow: hidden;
+        margin-top: 6px;
+    }
+    .progress-bar-fill {
+        height: 100%; background: #2cb681; border-radius: 4px;
+        transition: width .4s ease;
+    }
+    .progress-text {
+        font-size: .78rem; color: #64748b; display: flex;
+        justify-content: space-between; align-items: center;
+    }
+    .progress-pct { font-weight: 700; color: #2cb681; }
+
+    /* Lista de tareas */
+    .drawer-body {
+        flex: 1; overflow-y: auto; padding: 10px 0;
+    }
+    .drawer-body::-webkit-scrollbar { width: 4px; }
+    .drawer-body::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+
+    .subtarea-item {
+        display: flex; align-items: flex-start; gap: 10px;
+        padding: 10px 22px;
+        border-bottom: 1px solid #f8fafc;
+        transition: background .15s;
+        cursor: default;
+    }
+    .subtarea-item:hover { background: #fafbfc; }
+    .subtarea-item.done { background: #f0fdf9; }
+
+    .subtarea-check {
+        width: 20px; height: 20px; flex-shrink: 0;
+        border: 2px solid #cbd5e1; border-radius: 6px;
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: all .15s; margin-top: 1px;
+        background: #fff;
+    }
+    .subtarea-check.checked {
+        background: #2cb681; border-color: #2cb681;
+    }
+    .subtarea-check.checked::after {
+        content: '✓'; color: #fff; font-size: .8rem; font-weight: 700;
+    }
+
+    .subtarea-content { flex: 1; min-width: 0; }
+    .subtarea-nombre {
+        font-size: .875rem; color: #1e293b; line-height: 1.35;
+        transition: color .15s;
+    }
+    .subtarea-item.done .subtarea-nombre {
+        color: #065f46; text-decoration: line-through;
+        text-decoration-color: #a7f3d0;
+    }
+    .subtarea-fecha {
+        font-size: .72rem; color: #94a3b8; margin-top: 2px;
+    }
+
+    /* Nota inline */
+    .nota-toggle {
+        background: none; border: none; font-size: .72rem; color: #94a3b8;
+        cursor: pointer; padding: 2px 4px; border-radius: 4px;
+        transition: all .15s; margin-top: 4px; display: inline-block;
+    }
+    .nota-toggle:hover { color: #475569; background: #f1f5f9; }
+    .nota-area {
+        display: none; margin-top: 6px;
+    }
+    .nota-area.open { display: block; }
+    .nota-input {
+        width: 100%; border: 1.5px solid #e2e8f0; border-radius: 8px;
+        padding: 5px 9px; font-size: .8rem; color: #374151;
+        resize: none; outline: none; font-family: inherit;
+        transition: border-color .2s;
+    }
+    .nota-input:focus { border-color: #2cb681; }
+    .nota-save {
+        margin-top: 4px; font-size: .75rem; font-weight: 600;
+        background: #2cb681; color: #fff; border: none;
+        border-radius: 6px; padding: 3px 10px; cursor: pointer;
+        transition: background .15s;
+    }
+    .nota-save:hover { background: #22a06b; }
+    .nota-saved-msg {
+        font-size: .72rem; color: #2cb681; margin-left: 6px;
+        opacity: 0; transition: opacity .3s;
+    }
+    .nota-saved-msg.show { opacity: 1; }
+
+    /* Footer del drawer */
+    .drawer-footer {
+        padding: 14px 22px;
+        border-top: 1px solid #f1f5f9;
+        flex-shrink: 0;
+        display: flex; gap: 8px;
+    }
+    .btn-pdf {
+        flex: 1; padding: 10px; border-radius: 12px; border: none;
+        background: linear-gradient(135deg,#2cb681,#22a06b); color: #fff;
+        font-size: .875rem; font-weight: 600; cursor: pointer;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        box-shadow: 0 3px 10px rgba(44,182,129,.35);
+        transition: transform .15s, box-shadow .15s;
+        text-decoration: none;
+    }
+    .btn-pdf:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(44,182,129,.45); color:#fff;}
+
+    /* Loading spinner */
+    .drawer-loading {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; height: 180px; color: #94a3b8; gap: 12px;
+    }
+    .spinner {
+        width: 28px; height: 28px; border: 3px solid #f1f5f9;
+        border-top-color: #2cb681; border-radius: 50%;
+        animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+
+    /* ── BOTÓN SUBTAREAS en la tabla ──────────────────────── */
+    .btn-subtareas {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 10px; border-radius: 8px; font-size: .78rem; font-weight: 600;
+        border: 1.5px solid #2cb681; color: #2cb681; background: transparent;
+        cursor: pointer; transition: all .15s; white-space: nowrap;
+    }
+    .btn-subtareas:hover { background: #2cb681; color: #fff; }
+    .badge-prog {
+        display: inline-block; padding: 1px 6px; border-radius: 10px;
+        font-size: .7rem; font-weight: 700; background: #ecfdf5; color: #065f46;
+    }
+    .badge-prog.parcial { background: #fffbeb; color: #92400e; }
+    .badge-prog.vacio   { background: #f1f5f9; color: #94a3b8; }
+</style>
+
+<!-- ── OVERLAY ── -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="cerrarDrawer()"></div>
+
+<!-- ── DRAWER ── -->
+<div class="subtarea-drawer" id="subtareaDrawer">
+
+    <div class="drawer-header">
+        <div>
+            <h5 id="drawerTitulo">Subtareas</h5>
+            <div class="sub" id="drawerSub">—</div>
+        </div>
+        <button class="drawer-close" onclick="cerrarDrawer()" title="Cerrar">✕</button>
+    </div>
+
+    <div class="drawer-progress" id="drawerProgress" style="display:none">
+        <div class="progress-text">
+            <span id="progTexto">0 de 0 completadas</span>
+            <span class="progress-pct" id="progPct">0%</span>
+        </div>
+        <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="progFill" style="width:0%"></div>
+        </div>
+    </div>
+
+    <div class="drawer-body" id="drawerBody">
+        <div class="drawer-loading">
+            <div class="spinner"></div>
+            <span style="font-size:.85rem">Cargando actividades...</span>
+        </div>
+    </div>
+
+    <div class="drawer-footer">
+        <a id="btnPdf" href="#" target="_blank" class="btn-pdf">
+            📄 Generar PDF del mantenimiento
+        </a>
+    </div>
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     CONTENIDO PRINCIPAL
+════════════════════════════════════════════════════════ -->
+
 <a href="/equipos/" class="btn btn-secondary mb-4">← Volver a equipos</a>
 
 {% if messages %}
@@ -59,14 +291,30 @@
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h4 class="mb-0">Historial de Mantenimientos</h4>
 
-        <!-- Filtro por fecha -->
         <div class="d-flex gap-2 align-items-center flex-wrap">
             <span class="text-muted small fw-bold">Filtrar:</span>
-            <input type="date" id="filtroDesde" class="form-control form-control-sm"
-                   style="width:150px">
+
+            <!-- Filtro por tipo (programado/no programado) -->
+            <select id="filtroProg" class="form-select form-select-sm" style="width:160px"
+                    onchange="aplicarFiltrosServidor()">
+                <option value=""   {% if not filtro_prog %}selected{% endif %}>Todos</option>
+                <option value="true"  {% if filtro_prog == 'true' %}selected{% endif %}>📅 Programados</option>
+                <option value="false" {% if filtro_prog == 'false' %}selected{% endif %}>⚡ No programados</option>
+            </select>
+
+            <!-- Filtro por código de error -->
+            <input type="text" id="filtroError" class="form-control form-control-sm"
+                   style="width:160px" placeholder="Cód. error..."
+                   value="{{ filtro_error }}"
+                   onkeydown="if(event.key==='Enter') aplicarFiltrosServidor()"
+                   title="Busca por código de error en campo dedicado, problema o solución">
+            <button class="btn btn-sm btn-outline-primary" onclick="aplicarFiltrosServidor()">🔍</button>
+
+            <!-- Filtro por fecha (JS) -->
+            <input type="date" id="filtroDesde" class="form-control form-control-sm" style="width:150px">
             <span class="text-muted small">→</span>
-            <input type="date" id="filtroHasta" class="form-control form-control-sm"
-                   style="width:150px">
+            <input type="date" id="filtroHasta" class="form-control form-control-sm" style="width:150px">
+
             <button class="btn btn-sm btn-outline-secondary" onclick="limpiarFiltro()">✕ Limpiar</button>
         </div>
     </div>
@@ -77,10 +325,11 @@
                 <tr>
                     <th style="width:36px"></th>
                     <th>Tipo</th>
+                    <th>Modo</th>
                     <th>Fecha</th>
                     <th>Técnico</th>
                     <th>Estado</th>
-                    <th>Costo</th>
+                    <th>Cód. Error</th>
                     <th>Docs</th>
                     <th>Acciones</th>
                 </tr>
@@ -96,11 +345,16 @@
                     <td class="text-center">
                         <span id="flecha{{ m.id }}"
                               style="display:inline-block;transition:transform .2s;
-                                     font-size:.75rem;color:#6b7280">
-                            ▶
-                        </span>
+                                     font-size:.75rem;color:#6b7280">▶</span>
                     </td>
                     <td class="fw-bold">{{ m.get_tipo_display }}</td>
+                    <td>
+                        {% if m.programado %}
+                            <span class="badge" style="background:#dbeafe;color:#1d4ed8;font-size:.72rem">📅 Programado</span>
+                        {% else %}
+                            <span class="badge" style="background:#fee2e2;color:#b91c1c;font-size:.72rem">⚡ No prog.</span>
+                        {% endif %}
+                    </td>
                     <td>{{ m.fecha }}</td>
                     <td>{{ m.tecnico|default:"—" }}</td>
                     <td>
@@ -116,7 +370,17 @@
                             <span class="badge bg-secondary">{{ m.estado }}</span>
                         {% endif %}
                     </td>
-                    <td>${{ m.costo }}</td>
+                    <td>
+                        {% with codigos=m.codigos_error_all %}
+                            {% if codigos %}
+                                {% for cod in codigos %}
+                                    <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.7rem;margin:1px">{{ cod }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        {% endwith %}
+                    </td>
                     <td>
                         {% with n=m.documentos.count %}
                             {% if n %}<span class="badge bg-primary">{{ n }} 📎</span>
@@ -124,18 +388,25 @@
                         {% endwith %}
                     </td>
                     <td onclick="event.stopPropagation()">
-                        <a href="/mantenimiento/{{ m.id }}/editar/"
-                           class="btn btn-sm btn-outline-primary">✏️ Editar</a>
+                        <div class="d-flex gap-1 flex-wrap">
+                            <a href="/mantenimiento/{{ m.id }}/editar/"
+                               class="btn btn-sm btn-outline-primary">✏️ Editar</a>
+                            <button class="btn-subtareas"
+                                    id="btnSubt{{ m.id }}"
+                                    onclick="abrirDrawer({{ m.id }}, '{{ m.tipo_display|escapejs }}', '{{ m.fecha }}', {{ m.programado|yesno:'true,false' }})"
+                                    title="Ver checklist de actividades">
+                                ☑ Subtareas
+                            </button>
+                        </div>
                     </td>
                 </tr>
 
                 <!-- FILA DETALLE EXPANDIBLE -->
                 <tr id="detalle{{ m.id }}" class="fila-detalle" style="display:none">
                     <td style="border-top:none;padding:0"></td>
-                    <td colspan="7" style="border-top:none;padding:0 0 12px 0">
+                    <td colspan="8" style="border-top:none;padding:0 0 12px 0">
                         <div style="background:#f8fafc;border:1px solid #e2e8f0;
                                     border-radius:10px;padding:20px;margin-right:4px">
-
                             <div class="row g-3">
 
                                 <!-- Tabla info -->
@@ -148,11 +419,8 @@
                                         <tr>
                                             <th style="background:#f1f5f9;font-size:.82rem">Tipo</th>
                                             <td style="font-size:.85rem">
-                                                {% if m.tipo == 'otro' %}
-                                                    {{ m.tipo_otro|default:"Otro" }}
-                                                {% else %}
-                                                    {{ m.get_tipo_display }}
-                                                {% endif %}
+                                                {% if m.tipo == 'otro' %}{{ m.tipo_otro|default:"Otro" }}
+                                                {% else %}{{ m.get_tipo_display }}{% endif %}
                                             </td>
                                         </tr>
                                         <tr>
@@ -176,8 +444,16 @@
                                             <td style="font-size:.85rem">{{ m.estado }}</td>
                                         </tr>
                                         <tr>
-                                            <th style="background:#f1f5f9;font-size:.82rem">Costo</th>
-                                            <td style="font-size:.85rem">${{ m.costo }}</td>
+                                            <th style="background:#f1f5f9;font-size:.82rem">Código(s) de error</th>
+                                            <td style="font-size:.85rem">
+                                                {% with codigos=m.codigos_error_all %}
+                                                    {% if codigos %}
+                                                        {% for cod in codigos %}
+                                                            <span class="badge" style="background:#fef3c7;color:#92400e;margin:1px">{{ cod }}</span>
+                                                        {% endfor %}
+                                                    {% else %}—{% endif %}
+                                                {% endwith %}
+                                            </td>
                                         </tr>
                                         <tr>
                                             <th style="background:#f1f5f9;font-size:.82rem">Usos / mAs</th>
@@ -197,7 +473,6 @@
                                 <!-- Próximo + documentos -->
                                 <div class="col-md-7">
 
-                                    <!-- Próximo mantenimiento -->
                                     {% if m.fecha_proximo %}
                                     <div class="alert alert-success py-2 mb-3 small">
                                         📅 <strong>Próximo:</strong> {{ m.fecha_proximo }}
@@ -250,8 +525,7 @@
                                     {% endif %}
 
                                     <!-- Subir documento -->
-                                    <div class="border rounded bg-white p-3"
-                                         onclick="event.stopPropagation()">
+                                    <div class="border rounded bg-white p-3" onclick="event.stopPropagation()">
                                         <p class="fw-bold small mb-2">➕ Adjuntar documento</p>
                                         <form method="post"
                                               action="/mantenimiento/{{ m.id }}/documento/subir/"
@@ -290,8 +564,7 @@
                                                            required>
                                                 </div>
                                             </div>
-                                            <button type="submit"
-                                                    class="btn btn-primary btn-sm mt-2">📤 Subir</button>
+                                            <button type="submit" class="btn btn-primary btn-sm mt-2">📤 Subir</button>
                                         </form>
                                     </div>
 
@@ -303,7 +576,7 @@
 
             {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center text-muted py-4">
+                    <td colspan="9" class="text-center text-muted py-4">
                         Sin mantenimientos registrados.
                     </td>
                 </tr>
@@ -315,19 +588,232 @@
     <div id="sinResultados" class="text-center text-muted py-3" style="display:none">
         No hay mantenimientos en ese rango de fechas.
     </div>
+</div>
+
+<style>
+    .cron-section {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.05);
+        padding: 28px 32px;
+        margin-top: 28px;
+    }
+    .cron-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    .cron-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .cron-badge {
+        background: #dbeafe;
+        color: #1d4ed8;
+        border-radius: 20px;
+        padding: 2px 10px;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+    .cron-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .btn-cron-pdf {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 18px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+        color: #fff;
+        font-size: .85rem;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 3px 12px rgba(29,78,216,.3);
+        transition: transform .15s, box-shadow .15s;
+        border: none;
+        cursor: pointer;
+    }
+    .btn-cron-pdf:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 5px 18px rgba(29,78,216,.4);
+        color: #fff;
+    }
+    .cron-table th {
+        background: #1d4ed8;
+        color: #fff;
+        font-size: .76rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        padding: 10px 14px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .cron-table td {
+        font-size: .875rem;
+        padding: 10px 14px;
+        vertical-align: middle;
+        color: #1e293b;
+    }
+    .cron-table tr:nth-child(even) td { background: #f8fafc; }
+    .cron-table tr:hover td { background: #eff6ff; }
+    .cron-badge-estado {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 10px;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+    .cron-badge-estado.pendiente  { background:#fef9c3; color:#854d0e; }
+    .cron-badge-estado.completado { background:#dcfce7; color:#166534; }
+    .cron-badge-estado.cancelado  { background:#f1f5f9; color:#64748b; }
+    .cron-empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: #94a3b8;
+    }
+    .cron-empty a {
+        color: #2563eb;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .cron-empty a:hover { text-decoration: underline; }
+    .cron-filter-bar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+    .cron-filter-bar select,
+    .cron-filter-bar input {
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: .85rem;
+        color: #374151;
+        background: #fafbfc;
+        outline: none;
+        transition: border-color .2s;
+    }
+    .cron-filter-bar select:focus,
+    .cron-filter-bar input:focus { border-color: #2563eb; }
+</style>
+
+<!-- ══ SECCIÓN CRONOGRAMA PROGRAMADO ══ -->
+<div class="cron-section">
+    <div class="cron-header">
+        <div class="cron-title">
+            📅 Cronograma de mantenimientos programados
+            <span class="cron-badge" id="cronCount">0</span>
+        </div>
+        <div class="cron-actions">
+            <a href="/equipo/{{ equipo.id }}/cronograma/pdf/"
+               class="btn-cron-pdf"
+               target="_blank">
+                📄 Descargar PDF
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtros rápidos -->
+    <div class="cron-filter-bar">
+        <select id="cronFiltroAno" onchange="filtrarCronograma()">
+            <option value="">Todos los años</option>
+        </select>
+        <select id="cronFiltroEstado" onchange="filtrarCronograma()">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="completado">Completado</option>
+            <option value="cancelado">Cancelado</option>
+        </select>
+        <button onclick="limpiarCronFiltro()"
+                style="background:none;border:1.5px solid #e2e8f0;border-radius:8px;
+                       padding:6px 12px;font-size:.82rem;color:#64748b;cursor:pointer">
+            ✕ Limpiar
+        </button>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table cron-table align-middle mb-0" id="cronTabla">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Fecha</th>
+                    <th>Ciudad / Lugar</th>
+                    <th>Marca</th>
+                    <th>Equipo</th>
+                    <th>Serie</th>
+                    <th>Actividad</th>
+                    <th>Estado</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="cronBody">
+                {% for m in programados %}
+                <tr data-ano="{{ m.fecha|date:'Y' }}"
+                    data-estado="{{ m.estado|lower }}">
+                    <td>{{ forloop.counter }}</td>
+                    <td><strong>{{ m.fecha|date:"d/m/Y" }}</strong></td>
+                    <td>{{ m.ciudad|default:"—" }}</td>
+                    <td>{{ equipo.marca }}</td>
+                    <td>{{ equipo.nombre }}</td>
+                    <td><code>{{ equipo.serie }}</code></td>
+                    <td>
+                        Mant. {% if m.etiqueta %}{{ m.etiqueta_display }}{% endif %}
+                        <span class="text-muted">({{ m.tipo_display }})</span>
+                    </td>
+                    <td>
+                        <span class="cron-badge-estado {{ m.estado|lower }}">
+                            {{ m.estado|capfirst }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="/mantenimiento/{{ m.id }}/editar/"
+                        class="btn btn-sm btn-outline-primary"
+                        style="border-radius:7px;font-size:.78rem;padding:3px 10px">
+                            ✏️ Editar
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not programados %}
+        <div class="cron-empty">
+            <p style="font-size:1.1rem;margin-bottom:8px">📭 Sin mantenimientos programados</p>
+            <p style="font-size:.875rem">
+                <a href="/subir-mantenimientos/">Crea el cronograma periódico</a>
+                desde el módulo de mantenimientos.
+            </p>
+        </div>
+        {% endif %}
 
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-// ── Expandir / colapsar ──────────────────────────────────
+// ════════════════════════════════════════
+//  EXPANDIR / COLAPSAR FILA
+// ════════════════════════════════════════
 function toggleDetalle(id, filaEl) {
     const detalle = document.getElementById('detalle' + id);
     const flecha  = document.getElementById('flecha' + id);
     const abierto = detalle.style.display !== 'none';
 
-    // Cerrar todos los demás antes de abrir uno nuevo (opcional — quitar si se quieren varios a la vez)
     document.querySelectorAll('.fila-detalle').forEach(el => {
         if (el.id !== 'detalle' + id) el.style.display = 'none';
     });
@@ -339,7 +825,9 @@ function toggleDetalle(id, filaEl) {
     flecha.style.transform = abierto ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
-// ── Filtro por rango de fechas ───────────────────────────
+// ════════════════════════════════════════
+//  FILTRO POR FECHAS
+// ════════════════════════════════════════
 document.getElementById('filtroDesde').addEventListener('change', aplicarFiltro);
 document.getElementById('filtroHasta').addEventListener('change', aplicarFiltro);
 
@@ -350,10 +838,10 @@ function aplicarFiltro() {
     let visibles = 0;
 
     filas.forEach(fila => {
-        const fecha    = fila.dataset.fecha;
-        const id       = fila.querySelector('[id^="flecha"]').id.replace('flecha', '');
-        const detalle  = document.getElementById('detalle' + id);
-        const mostrar  = (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
+        const fecha   = fila.dataset.fecha;
+        const id      = fila.querySelector('[id^="flecha"]').id.replace('flecha','');
+        const detalle = document.getElementById('detalle' + id);
+        const mostrar = (!desde || fecha >= desde) && (!hasta || fecha <= hasta);
 
         fila.style.display = mostrar ? '' : 'none';
         if (!mostrar && detalle) {
@@ -370,7 +858,293 @@ function aplicarFiltro() {
 function limpiarFiltro() {
     document.getElementById('filtroDesde').value = '';
     document.getElementById('filtroHasta').value = '';
+    document.getElementById('filtroError').value = '';
+    document.getElementById('filtroProg').value  = '';
     aplicarFiltro();
+    // También limpiar filtros de servidor si había alguno activo
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('programado') || url.searchParams.has('cod_error')) {
+        url.searchParams.delete('programado');
+        url.searchParams.delete('cod_error');
+        window.location.href = url.toString();
+    }
+}
+
+function aplicarFiltrosServidor() {
+    const prog  = document.getElementById('filtroProg').value;
+    const error = document.getElementById('filtroError').value.trim();
+    const url   = new URL(window.location.href);
+    if (prog)  url.searchParams.set('programado', prog);
+    else       url.searchParams.delete('programado');
+    if (error) url.searchParams.set('cod_error', error);
+    else       url.searchParams.delete('cod_error');
+    window.location.href = url.toString();
+}
+
+// ════════════════════════════════════════
+//  DRAWER DE SUBTAREAS
+// ════════════════════════════════════════
+let drawerMantenimientoId = null;
+
+function abrirDrawer(mantId, tipo, fecha, esProgramado) {
+    drawerMantenimientoId = mantId;
+
+    // Encabezado
+    document.getElementById('drawerTitulo').textContent = 'Checklist de actividades';
+    const badgeProg = esProgramado
+        ? '<span style="background:#dbeafe;color:#1d4ed8;border-radius:8px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-left:6px">📅 Programado</span>'
+        : '<span style="background:#fee2e2;color:#b91c1c;border-radius:8px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-left:6px">⚡ No programado</span>';
+    document.getElementById('drawerSub').innerHTML = `${tipo} · ${fecha} ${badgeProg}`;
+
+    // URL del PDF
+    document.getElementById('btnPdf').href = `/mantenimiento/${mantId}/pdf/`;
+
+    // Mostrar spinner
+    const body = document.getElementById('drawerBody');
+    body.innerHTML = `
+        <div class="drawer-loading">
+            <div class="spinner"></div>
+            <span style="font-size:.85rem">Cargando actividades...</span>
+        </div>`;
+    document.getElementById('drawerProgress').style.display = 'none';
+
+    // Abrir
+    document.getElementById('subtareaDrawer').classList.add('open');
+    document.getElementById('drawerOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Cargar datos
+    fetch(`/mantenimiento/${mantId}/subtareas/`)
+        .then(r => r.json())
+        .then(data => renderSubtareas(data))
+        .catch(() => {
+            body.innerHTML = `<div class="drawer-loading" style="color:#ef4444">
+                Error al cargar subtareas</div>`;
+        });
+}
+
+function cerrarDrawer() {
+    document.getElementById('subtareaDrawer').classList.remove('open');
+    document.getElementById('drawerOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+    drawerMantenimientoId = null;
+}
+
+// Cerrar con Escape
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cerrarDrawer();
+});
+
+// ── Renderizar lista de subtareas ──
+function renderSubtareas(data) {
+    actualizarProgreso(data.completadas, data.total);
+
+    const body = document.getElementById('drawerBody');
+
+    if (!data.subtareas.length) {
+        body.innerHTML = `<div class="drawer-loading">
+            <span>Sin subtareas configuradas</span></div>`;
+        return;
+    }
+
+    // Banner de memoria si hay heredadas
+    let banner = '';
+    if (data.programado && data.heredadas > 0) {
+        banner = `
+        <div style="margin:10px 22px 2px;padding:8px 12px;background:#eff6ff;
+                    border-left:3px solid #3b82f6;border-radius:6px;font-size:.78rem;color:#1e40af">
+            ↩ <strong>${data.heredadas}</strong> subtarea(s) ya completadas en un mantenimiento anterior de esta serie
+            <br><span style="color:#64748b">Puedes desmarcarlas si deben revisarse nuevamente.</span>
+        </div>`;
+    }
+
+    body.innerHTML = banner + data.subtareas.map(s => {
+        const esHeredada = s.heredada && s.completada;
+        const itemStyle  = esHeredada
+            ? 'background:#eff6ff;border-left:3px solid #93c5fd'
+            : (s.completada ? 'background:#f0fdf9' : '');
+        const notaDisplay = esHeredada
+            ? '↩ completada en mantenimiento anterior'
+            : (s.nota ? '📝 ' + s.nota.substring(0,40) + (s.nota.length > 40 ? '...' : '') : '+ añadir nota');
+
+        return `
+        <div class="subtarea-item ${s.completada ? 'done' : ''}" id="item-${s.id}" style="${itemStyle}">
+            <div class="subtarea-check ${s.completada ? 'checked' : ''}"
+                 id="check-${s.id}"
+                 onclick="toggleSubtarea(${s.id})"
+                 title="${s.completada ? 'Desmarcar' : 'Marcar como completada'}">
+            </div>
+            <div class="subtarea-content">
+                <div class="subtarea-nombre" id="nombre-${s.id}">${s.nombre}</div>
+                ${s.fecha_check ? `<div class="subtarea-fecha">✓ ${s.fecha_check}</div>` : ''}
+                <button class="nota-toggle" onclick="toggleNota(${s.id})">
+                    ${notaDisplay}
+                </button>
+                <div class="nota-area ${(s.nota && !s.heredada) ? 'open' : ''}" id="notaArea-${s.id}">
+                    <textarea class="nota-input" id="notaInput-${s.id}"
+                              rows="2"
+                              placeholder="Observación sobre esta actividad...">${(!s.heredada && s.nota) ? s.nota : ''}</textarea>
+                    <button class="nota-save" onclick="guardarNota(${s.id})">Guardar</button>
+                    <span class="nota-saved-msg" id="notaSaved-${s.id}">✓ Guardado</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ── Progreso ──
+function actualizarProgreso(completadas, total) {
+    const pct = total > 0 ? Math.round(completadas / total * 100) : 0;
+    document.getElementById('progTexto').textContent = `${completadas} de ${total} completadas`;
+    document.getElementById('progPct').textContent   = `${pct}%`;
+    document.getElementById('progFill').style.width  = `${pct}%`;
+    document.getElementById('drawerProgress').style.display = 'block';
+}
+
+// ── Toggle subtarea ──
+function toggleSubtarea(eid) {
+    const check  = document.getElementById('check-' + eid);
+    const item   = document.getElementById('item-' + eid);
+    const nombre = document.getElementById('nombre-' + eid);
+
+    // Optimistic UI
+    const eraDone = check.classList.contains('checked');
+    check.classList.toggle('checked', !eraDone);
+    item.classList.toggle('done', !eraDone);
+
+    fetch(`/subtarea/${eid}/toggle/`, { method: 'POST', headers: { 'X-CSRFToken': getCsrf() } })
+        .then(r => r.json())
+        .then(data => {
+            // Actualizar fecha_check
+            const fechaEl = item.querySelector('.subtarea-fecha');
+            if (data.completada && data.fecha_check) {
+                if (fechaEl) {
+                    fechaEl.textContent = '✓ ' + data.fecha_check;
+                } else {
+                    const div = document.createElement('div');
+                    div.className = 'subtarea-fecha';
+                    div.textContent = '✓ ' + data.fecha_check;
+                    nombre.insertAdjacentElement('afterend', div);
+                }
+            } else if (fechaEl) {
+                fechaEl.remove();
+            }
+
+            // Recalcular progreso
+            const checks  = document.querySelectorAll('.subtarea-check.checked');
+            const total   = document.querySelectorAll('.subtarea-check').length;
+            actualizarProgreso(checks.length, total);
+
+            // Actualizar badge en la tabla
+            actualizarBadge();
+        })
+        .catch(() => {
+            // Revertir si falla
+            check.classList.toggle('checked', eraDone);
+            item.classList.toggle('done', eraDone);
+        });
+}
+
+// ── Toggle nota ──
+function toggleNota(eid) {
+    const area = document.getElementById('notaArea-' + eid);
+    area.classList.toggle('open');
+    if (area.classList.contains('open')) {
+        document.getElementById('notaInput-' + eid).focus();
+    }
+}
+
+// ── Guardar nota ──
+function guardarNota(eid) {
+    const nota    = document.getElementById('notaInput-' + eid).value;
+    const savedEl = document.getElementById('notaSaved-' + eid);
+
+    fetch(`/subtarea/${eid}/nota/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrf(),
+        },
+        body: JSON.stringify({ nota }),
+    })
+    .then(r => r.json())
+    .then(() => {
+        savedEl.classList.add('show');
+        setTimeout(() => savedEl.classList.remove('show'), 2000);
+    });
+}
+
+// ── Actualizar badge en la tabla ──
+function actualizarBadge() {
+    if (!drawerMantenimientoId) return;
+    const btn     = document.getElementById('btnSubt' + drawerMantenimientoId);
+    if (!btn) return;
+
+    const checks  = document.querySelectorAll('.subtarea-check.checked');
+    const total   = document.querySelectorAll('.subtarea-check').length;
+
+    if (!total) return;
+    const pct = Math.round(checks.length / total * 100);
+
+    let badgeClass = 'vacio';
+    if (pct === 100) badgeClass = '';
+    else if (pct > 0) badgeClass = 'parcial';
+
+    btn.innerHTML = `☑ Subtareas <span class="badge-prog ${badgeClass}">${checks.length}/${total}</span>`;
+}
+
+// ── CSRF ──
+function getCsrf() {
+    return document.cookie.split(';').map(c => c.trim())
+        .find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+</script>
+
+
+
+<!-- ══ FIN CRONOGRAMA ══ -->
+
+<script>
+// ── Contar filas y poblar filtro de año ──────────────────
+(function initCronograma() {
+    const rows = document.querySelectorAll('#cronBody tr');
+    document.getElementById('cronCount').textContent = rows.length;
+
+    // Años únicos
+    const anos = [...new Set([...rows].map(r => r.dataset.ano))].sort();
+    const sel  = document.getElementById('cronFiltroAno');
+    anos.forEach(a => {
+        const opt = document.createElement('option');
+        opt.value = a; opt.textContent = a;
+        sel.appendChild(opt);
+    });
+})();
+
+function filtrarCronograma() {
+    const ano    = document.getElementById('cronFiltroAno').value;
+    const estado = document.getElementById('cronFiltroEstado').value;
+    let visibles = 0;
+    document.querySelectorAll('#cronBody tr').forEach(tr => {
+        const okAno    = !ano    || tr.dataset.ano    === ano;
+        const okEstado = !estado || tr.dataset.estado === estado;
+        tr.style.display = (okAno && okEstado) ? '' : 'none';
+        if (okAno && okEstado) visibles++;
+    });
+    document.getElementById('cronCount').textContent = visibles;
+}
+
+function limpiarCronFiltro() {
+    document.getElementById('cronFiltroAno').value    = '';
+    document.getElementById('cronFiltroEstado').value = '';
+    filtrarCronograma();
+    // Restaurar count total
+    document.getElementById('cronCount').textContent =
+        document.querySelectorAll('#cronBody tr').length;
 }
 </script>
+
+
+
+
 {% endblock %}

@@ -146,12 +146,30 @@ class Mantenimiento(models.Model):
     ]
 
     ETIQUETA_CHOICES = [
+        ('bimestral',     'Bimestral'),
         ('trimestral',    'Trimestral'),
         ('cuatrimestral', 'Cuatrimestral'),
         ('semestral',     'Semestral'),
         ('anual',         'Anual'),
         ('otro',          'Otro'),
     ]
+
+    # ── NUEVO: distingue programado vs no programado ──────────────────
+    programado  = models.BooleanField(
+        default=False,
+        help_text=(
+            'True = mantenimiento programado (periódico, generado por el sistema). '
+            'False = no programado (imprevisto o correctivo puntual).'
+        )
+    )
+    # Enlace entre instancias de una misma serie periódica
+    serie_programada = models.ForeignKey(
+        'self',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='serie_hijos',
+        help_text='Primer mantenimiento de la serie (null si es el primero)'
+    )
 
     equipo      = models.ForeignKey(Equipo, on_delete=models.CASCADE)
     tipo        = models.CharField(max_length=50, choices=TIPO_CHOICES, default='preventivo')
@@ -183,7 +201,7 @@ class Mantenimiento(models.Model):
     estado      = models.CharField(max_length=50)
     costo       = models.FloatField()
 
-    # ── NUEVOS CAMPOS ────────────────────────────────────────
+    # ── CAMPOS DE PERIODICIDAD ───────────────────────────────
     etiqueta           = models.CharField(
         max_length=20,
         choices=ETIQUETA_CHOICES,
@@ -216,6 +234,26 @@ class Mantenimiento(models.Model):
         help_text='Descripción si etiqueta_proximo es "otro"'
     )
 
+    # ── Ciudad / lugar del servicio (para cronograma) ─────────────────
+    ciudad = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text='Ciudad o lugar donde se realiza el mantenimiento'
+    )
+
+    # ── Código(s) de error ────────────────────────────────────────────
+    codigo_error = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text=(
+            'Código(s) de error reportados por el equipo. '
+            'Puede ingresar varios separados por coma. '
+            'También se detectan códigos mencionados en problema/solución.'
+        )
+    )
+
     class Meta:
         unique_together = (
             'equipo', 'tipo', 'fecha',
@@ -223,25 +261,104 @@ class Mantenimiento(models.Model):
         )
 
     def __str__(self):
-        return f"{self.equipo.codigo} — {self.tipo_display()} ({self.fecha})"
+        prefijo = '[P]' if self.programado else '[NP]'
+        return f"{prefijo} {self.equipo.codigo} — {self.tipo_display()} ({self.fecha})"
 
     def tipo_display(self):
-        """Devuelve el tipo legible, incluyendo 'otro' personalizado."""
         if self.tipo == 'otro':
             return self.tipo_otro or 'Otro'
         return self.get_tipo_display() or self.tipo
 
     def etiqueta_display(self):
-        """Devuelve la etiqueta legible de este mantenimiento."""
         if self.etiqueta == 'otro':
             return self.etiqueta_otro or 'Otro'
         return self.get_etiqueta_display() or '—'
 
     def etiqueta_proximo_display(self):
-        """Devuelve la etiqueta legible del próximo mantenimiento."""
         if self.etiqueta_proximo == 'otro':
             return self.etiqueta_proximo_otro or 'Otro'
         return self.get_etiqueta_proximo_display() or '—'
+
+    def codigos_error_all(self):
+        """
+        Devuelve lista de códigos de error únicos combinando:
+        1. El campo codigo_error (explícito).
+        2. Códigos detectados en problema/solución mediante regex.
+        Patrón: combinaciones alfanuméricas tipo E01, ERR-404, F-23, 0x8A...
+        """
+        import re
+        patron = re.compile(
+            r'\b(?:[A-Za-z]{1,4}[-_]?\d{2,6}|\d{2,6}[-_]?[A-Za-z]{1,4}|0x[0-9A-Fa-f]{2,6}|ERR[:\s]?\w+)\b'
+        )
+        codigos = set()
+        if self.codigo_error:
+            for c in re.split(r'[,;\s]+', self.codigo_error):
+                c = c.strip()
+                if c:
+                    codigos.add(c.upper())
+        for campo in [self.problema or '', self.solucion or '', self.descripcion or '']:
+            for match in patron.finditer(campo):
+                codigos.add(match.group(0).upper())
+        return sorted(codigos)
+
+
+# ──────────────────────────────────────────────────────────────
+#  SUBTAREAS DE MANTENIMIENTO
+# ──────────────────────────────────────────────────────────────
+
+class SubtareaPlantilla(models.Model):
+    tipo_equipo  = models.CharField(
+        max_length=50,
+        choices=Equipo.TIPO_CHOICES,
+        help_text='Tipo de equipo al que aplica esta subtarea'
+    )
+    nombre       = models.CharField(max_length=200, help_text='Descripción de la subtarea')
+    orden        = models.PositiveSmallIntegerField(default=0, help_text='Orden de aparición')
+    activa       = models.BooleanField(default=True, help_text='Desactivar para ocultar sin borrar')
+
+    class Meta:
+        verbose_name        = 'Subtarea plantilla'
+        verbose_name_plural = 'Subtareas plantilla'
+        ordering            = ['tipo_equipo', 'orden', 'nombre']
+
+    def __str__(self):
+        tipo_label = dict(Equipo.TIPO_CHOICES).get(self.tipo_equipo, self.tipo_equipo)
+        return f"[{tipo_label}] {self.nombre}"
+
+
+class SubtareaEjecucion(models.Model):
+    mantenimiento = models.ForeignKey(
+        Mantenimiento,
+        on_delete=models.CASCADE,
+        related_name='subtareas'
+    )
+    plantilla     = models.ForeignKey(
+        SubtareaPlantilla,
+        on_delete=models.CASCADE,
+        related_name='ejecuciones'
+    )
+    completada    = models.BooleanField(default=False)
+    nota          = models.CharField(
+        max_length=300,
+        blank=True,
+        null=True,
+        help_text='Observación opcional sobre esta subtarea'
+    )
+    fecha_check   = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Cuándo se marcó como completada'
+    )
+
+    class Meta:
+        unique_together = ('mantenimiento', 'plantilla')
+        ordering        = ['plantilla__orden', 'plantilla__nombre']
+        verbose_name        = 'Ejecución de subtarea'
+        verbose_name_plural = 'Ejecuciones de subtareas'
+
+    def __str__(self):
+        estado = '✔' if self.completada else '○'
+        return f"{estado} {self.plantilla.nombre} — Mant. #{self.mantenimiento.id}"
 
 
 def ruta_documento(instance, filename):
