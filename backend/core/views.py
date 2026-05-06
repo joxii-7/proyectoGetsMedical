@@ -923,74 +923,97 @@ def _obtener_o_crear_subtareas(mantenimiento):
     Devuelve las SubtareaEjecucion del mantenimiento.
 
     LÓGICA DE MEMORIA PARA MANTENIMIENTOS PROGRAMADOS:
-    - Si el mantenimiento es programado y pertenece a una serie,
-      copia el estado (completada=True) de las subtareas que YA se
-      completaron en mantenimientos anteriores de la misma serie,
-      de modo que el técnico sólo vea pendiente lo que falta.
-    - Para mantenimientos NO programados, las subtareas son independientes.
+    - Las subtareas se crean si no existen.
+    - Cada vez que se consultan (no solo al crear), se recalcula qué
+      plantillas fueron completadas en mantenimientos ANTERIORES de la
+      misma serie y se actualiza el estado heredado automáticamente.
+    - Una subtarea heredada sólo se "hereda" si el técnico no la ha
+      marcado/desmarcado manualmente en ESTE mantenimiento. Detectamos
+      eso por la nota: si empieza con '↩' es herencia automática.
+    - Para mantenimientos NO programados las subtareas son independientes.
     """
     tipo = mantenimiento.equipo.tipo
 
-    # 1. ¿Ya tiene ejecuciones? Devolver directamente.
-    ejecuciones = SubtareaEjecucion.objects.filter(
+    # ── 1. Crear ejecuciones si no existen ────────────────────
+    ejecuciones_qs = SubtareaEjecucion.objects.filter(
         mantenimiento=mantenimiento
-    ).select_related('plantilla').order_by('plantilla__orden', 'plantilla__nombre')
+    ).select_related('plantilla')
 
-    if ejecuciones.exists():
-        return ejecuciones
-
-    # 2. Buscar plantillas activas para este tipo en BD.
-    plantillas = SubtareaPlantilla.objects.filter(
-        tipo_equipo=tipo, activa=True
-    ).order_by('orden', 'nombre')
-
-    # 3. Si no hay en BD, crearlas desde el catálogo default.
-    if not plantillas.exists():
-        tareas_default = SUBTAREAS_DEFAULT.get(tipo, SUBTAREAS_DEFAULT['otro'])
-        for i, nombre in enumerate(tareas_default):
-            SubtareaPlantilla.objects.get_or_create(
-                tipo_equipo=tipo,
-                nombre=nombre,
-                defaults={'orden': i, 'activa': True}
-            )
+    if not ejecuciones_qs.exists():
+        # Buscar/crear plantillas
         plantillas = SubtareaPlantilla.objects.filter(
             tipo_equipo=tipo, activa=True
         ).order_by('orden', 'nombre')
 
-    # 4. Para mantenimientos PROGRAMADOS: detectar subtareas ya completadas
-    #    en mantenimientos anteriores de la misma serie.
-    completadas_acumuladas = set()  # IDs de plantillas completadas en toda la serie
+        if not plantillas.exists():
+            tareas_default = SUBTAREAS_DEFAULT.get(tipo, SUBTAREAS_DEFAULT['otro'])
+            for i, nombre in enumerate(tareas_default):
+                SubtareaPlantilla.objects.get_or_create(
+                    tipo_equipo=tipo,
+                    nombre=nombre,
+                    defaults={'orden': i, 'activa': True}
+                )
+            plantillas = SubtareaPlantilla.objects.filter(
+                tipo_equipo=tipo, activa=True
+            ).order_by('orden', 'nombre')
 
+        for plantilla in plantillas:
+            SubtareaEjecucion.objects.get_or_create(
+                mantenimiento=mantenimiento,
+                plantilla=plantilla,
+                defaults={'completada': False},
+            )
+
+    # ── 2. Para programados: recalcular herencia en cada consulta ─
     if mantenimiento.programado:
-        # Encontrar la raíz de la serie (el primer mantenimiento)
-        raiz = mantenimiento.serie_programada or mantenimiento
+        # Raíz de la serie
+        raiz = mantenimiento.serie_programada if mantenimiento.serie_programada_id else mantenimiento
 
-        # Todos los mantenimientos de esta serie que sean ANTERIORES al actual
+        # Mantenimientos anteriores de la serie (por fecha, excluyendo el actual)
         anteriores = Mantenimiento.objects.filter(
-            Q(id=raiz.id) | Q(serie_programada=raiz),
+            Q(id=raiz.id) | Q(serie_programada_id=raiz.id),
             fecha__lt=mantenimiento.fecha,
         ).exclude(id=mantenimiento.id)
 
-        # Recopilar qué plantillas fueron completadas en alguno de ellos
-        completadas_acumuladas = set(
+        # Plantillas completadas en algún anterior
+        completadas_en_serie = set(
             SubtareaEjecucion.objects.filter(
                 mantenimiento__in=anteriores,
                 completada=True,
             ).values_list('plantilla_id', flat=True)
         )
 
-    # 5. Crear las ejecuciones, heredando estado si corresponde.
-    for plantilla in plantillas:
-        ya_completada = plantilla.id in completadas_acumuladas
-        SubtareaEjecucion.objects.get_or_create(
-            mantenimiento=mantenimiento,
-            plantilla=plantilla,
-            defaults={
-                'completada': ya_completada,
-                'fecha_check': timezone.now() if ya_completada else None,
-                'nota': '↩ Completada en mantenimiento anterior de la serie' if ya_completada else None,
-            }
-        )
+        # Actualizar solo las ejecuciones que son "herencia automática"
+        # (nota empieza con '↩') o que están sin marcar y deberían heredarse.
+        # NUNCA sobreescribir una que el técnico marcó/desmarcó manualmente
+        # en ESTE mantenimiento (detectado: nota NO empieza con '↩' y completada=True,
+        # o completada=False y nota no empieza con '↩').
+        for ejec in SubtareaEjecucion.objects.filter(mantenimiento=mantenimiento):
+            es_herencia_auto = ejec.nota and ejec.nota.startswith('↩')
+            deberia_heredar  = ejec.plantilla_id in completadas_en_serie
+
+            if es_herencia_auto and not deberia_heredar:
+                # Era heredada pero el técnico desmarcó en el anterior → limpiar
+                ejec.completada  = False
+                ejec.nota        = None
+                ejec.fecha_check = None
+                ejec.save(update_fields=['completada', 'nota', 'fecha_check'])
+
+            elif not ejec.completada and deberia_heredar and not es_herencia_auto:
+                # Debería estar heredada y no ha sido tocada manualmente
+                # (si el técnico la desmarcó manualmente: nota=None y completada=False
+                #  → aquí la volveríamos a heredar, lo cual no queremos)
+                # Solución: solo heredar si nota es None (nunca fue tocada)
+                if ejec.nota is None:
+                    ejec.completada  = True
+                    ejec.nota        = '↩ Completada en mantenimiento anterior de la serie'
+                    ejec.fecha_check = timezone.now()
+                    ejec.save(update_fields=['completada', 'nota', 'fecha_check'])
+
+            elif not ejec.completada and deberia_heredar and es_herencia_auto:
+                # Estaba heredada, la desmarcaron (toggle limpió completada pero dejó nota)
+                # → ya no hay nada que hacer, el toggle ya limpió la nota
+                pass
 
     return SubtareaEjecucion.objects.filter(
         mantenimiento=mantenimiento
@@ -1039,7 +1062,14 @@ def toggle_subtarea(request, ejecucion_id):
     ejecucion = get_object_or_404(SubtareaEjecucion, id=ejecucion_id)
     ejecucion.completada = not ejecucion.completada
     ejecucion.fecha_check = timezone.now() if ejecucion.completada else None
-    ejecucion.save(update_fields=['completada', 'fecha_check'])
+
+    # Si el técnico toca manualmente una subtarea heredada, limpiamos
+    # la nota '↩' para que el sistema sepa que fue una acción manual
+    # y no la sobreescriba en la próxima recarga de herencia.
+    if ejecucion.nota and ejecucion.nota.startswith('↩'):
+        ejecucion.nota = None
+
+    ejecucion.save(update_fields=['completada', 'fecha_check', 'nota'])
 
     return JsonResponse({
         'id':         ejecucion.id,
@@ -1199,10 +1229,10 @@ def pdf_mantenimiento(request, mantenimiento_id):
 
     tecnico_str  = str(mantenimiento.tecnico) if mantenimiento.tecnico else '—'
     m_data = [
-        ['Tipo',       mantenimiento.tipo_display(), 'Fecha',    str(mantenimiento.fecha)],
-        ['Estado',     mantenimiento.estado,          'Costo',    f'${mantenimiento.costo:.2f}'],
-        ['Técnico',    tecnico_str,                   'Atención', mantenimiento.get_tipo_atencion_display()],
-        ['Etiqueta',   mantenimiento.etiqueta_display(), 'Usos/mAs', str(equipo.usos_mas or '—')],
+        ['Tipo',     mantenimiento.tipo_display(),          'Fecha',    str(mantenimiento.fecha)],
+        ['Estado',   mantenimiento.estado,                  'Atención', mantenimiento.get_tipo_atencion_display()],
+        ['Técnico',  tecnico_str,                           'Etiqueta', mantenimiento.etiqueta_display()],
+        ['Usos/mAs', str(equipo.usos_mas or '—'),           'Modo',     'Programado' if mantenimiento.programado else 'No programado'],
     ]
 
     m_tbl = Table(
@@ -1236,34 +1266,32 @@ def pdf_mantenimiento(request, mantenimiento_id):
 
     # ── CHECKLIST DE SUBTAREAS ───────────────────────────────
     story.append(Spacer(1, 4*mm))
-    story.append(Paragraph('CHECKLIST DE ACTIVIDADES', s_section))
+    story.append(Paragraph('ACTIVIDADES REALIZADAS', s_section))
 
-    completadas_n = sum(1 for e in ejecuciones if e.completada)
-    total_n       = ejecuciones.count()
+    ejecuciones_list  = list(ejecuciones)
+    total_n           = len(ejecuciones_list)
+    completadas_list  = [e for e in ejecuciones_list if e.completada]
+    completadas_n     = len(completadas_list)
 
-    # Barra de progreso textual
+    # Resumen de progreso
     pct = int(completadas_n / total_n * 100) if total_n else 0
-    story.append(Paragraph(
-        f'<b>{completadas_n}</b> de <b>{total_n}</b> actividades completadas ({pct}%)',
-        ParagraphStyle('prog', parent=styles['Normal'], fontSize=9,
-                       textColor=VERDE if pct == 100 else colors.HexColor('#f59e0b'),
-                       spaceAfter=6)
-    ))
 
+
+    # Solo incluir en el PDF las que se completaron
     check_rows = []
-    for e in ejecuciones:
-        marca   = '&#x2611;' if e.completada else '&#x2610;'
-        estilo  = s_check_ok if e.completada else s_check
-        txt     = Paragraph(f'{marca}  {e.plantilla.nombre}', estilo)
+    for e in completadas_list:
+        txt     = Paragraph(f'&#x2611;  {e.plantilla.nombre}', s_check_ok)
         fecha_t = Paragraph(
             e.fecha_check.strftime('%d/%m/%Y') if e.fecha_check else '',
             ParagraphStyle('fch', parent=styles['Normal'], fontSize=8,
                            textColor=colors.HexColor('#94a3b8'), alignment=2)
         )
         check_rows.append([txt, fecha_t])
-        if e.nota:
+        # Omitir nota heredada de serie; mostrar solo notas reales del técnico
+        nota_real = e.nota if e.nota and not e.nota.startswith('↩') else None
+        if nota_real:
             check_rows.append([
-                Paragraph(f'↳ <i>{e.nota}</i>', s_nota), ''
+                Paragraph(f'↳ <i>{nota_real}</i>', s_nota), ''
             ])
 
     if check_rows:
@@ -1275,13 +1303,17 @@ def pdf_mantenimiento(request, mantenimiento_id):
             ('RIGHTPADDING',  (0,0), (-1,-1), 6),
             ('VALIGN',        (0,0), (-1,-1), 'TOP'),
             ('LINEBELOW',     (0,0), (-1,-2), 0.3, BORDE),
+            # Todas las filas son completadas → fondo verde para todas
+            ('BACKGROUND',    (0,0), (-1,-1), colors.HexColor('#f0fdf9')),
         ]
-        # Colorear filas completadas
-        for i, e in enumerate(ejecuciones):
-            if e.completada:
-                check_style.append(('BACKGROUND', (0,i), (-1,i), colors.HexColor('#f0fdf9')))
         check_tbl.setStyle(TableStyle(check_style))
         story.append(check_tbl)
+    else:
+        story.append(Paragraph(
+            'Sin actividades completadas registradas.',
+            ParagraphStyle('noact', parent=styles['Normal'], fontSize=9,
+                           textColor=colors.HexColor('#94a3b8'), spaceAfter=6)
+        ))
 
     # ── PRÓXIMO MANTENIMIENTO ────────────────────────────────
     if mantenimiento.fecha_proximo:
@@ -1351,8 +1383,15 @@ def pdf_mantenimiento(request, mantenimiento_id):
 
 def _generar_fechas(fecha_inicio, etiqueta, meses=12):
     """
-    Devuelve lista de date con las fechas desde fecha_inicio
-    dentro de los próximos `meses` meses según la etiqueta.
+    Devuelve lista de date con las fechas de la serie periódica
+    dentro de un año natural desde fecha_inicio, SIN incluir el
+    día exacto en que se cumple el año (límite exclusivo).
+
+    Ejemplo semestral desde 5-may-2025:
+      → 5-may-2025, 5-nov-2025   (5-may-2026 queda excluido)
+
+    Ejemplo trimestral desde 1-ene-2025:
+      → 1-ene, 1-abr, 1-jul, 1-oct  (1-ene-2026 excluido)
     """
     DELTAS = {
         'bimestral':     relativedelta(months=2),
@@ -1364,9 +1403,11 @@ def _generar_fechas(fecha_inicio, etiqueta, meses=12):
     delta = DELTAS.get(etiqueta)
     if not delta:
         return []
- 
+
+    # El límite es el día ANTERIOR al aniversario exacto (exclusivo)
+    limite = fecha_inicio + relativedelta(years=1) - relativedelta(days=1)
+
     fechas = []
-    limite = fecha_inicio + relativedelta(months=meses)
     d = fecha_inicio
     while d <= limite:
         fechas.append(d)

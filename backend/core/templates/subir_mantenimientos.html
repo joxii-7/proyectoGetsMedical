@@ -637,24 +637,38 @@ function switchTab(nombre, btn) {
 }
 
 /* ─── Preview de fechas programadas ─── */
-const INTERVALOS = {
-    bimestral:     60,
-    trimestral:    90,
-    cuatrimestral: 120,
-    semestral:     180,
-    anual:         365,
+
+// Suma N meses a una fecha respetando el calendario (no días fijos)
+function addMeses(fecha, meses) {
+    const d = new Date(fecha);
+    d.setMonth(d.getMonth() + meses);
+    return d;
+}
+
+const INTERVALOS_MESES = {
+    bimestral:     2,
+    trimestral:    3,
+    cuatrimestral: 4,
+    semestral:     6,
+    anual:         12,
 };
 
 function calcularFechas(inicio, etiqueta) {
-    const dias = INTERVALOS[etiqueta];
-    if (!dias || !inicio) return [];
+    const meses = INTERVALOS_MESES[etiqueta];
+    if (!meses || !inicio) return [];
+
     const fechas = [];
     let d = new Date(inicio + 'T00:00:00');
-    const fin = new Date(d);
+
+    // Límite: un año desde el inicio, SIN incluir el día exacto del aniversario
+    // (igual que en Python: fecha_inicio + 1 año - 1 día)
+    const fin = new Date(inicio + 'T00:00:00');
     fin.setFullYear(fin.getFullYear() + 1);
+    fin.setDate(fin.getDate() - 1);   // día anterior al aniversario → exclusivo
+
     while (d <= fin) {
         fechas.push(new Date(d));
-        d = new Date(d.getTime() + dias * 86400000);
+        d = addMeses(d, meses);
     }
     return fechas;
 }
